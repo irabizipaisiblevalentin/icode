@@ -4,3 +4,10 @@ node_modules/
 *.db-wal
 *.log
 .env
+.env.runtime
+data/
+start.sh
+# Contains real admin/webhook secrets — never commit.
+RENDER_SETUP.txt
+scripts/form-bridge.gs
+# The .example template (no secrets) IS tracked and documents the bridge.

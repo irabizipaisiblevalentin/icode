@@ -419,17 +419,42 @@
     }
 
     // ═══════════ ADMIN DASHBOARD ═══════════
-    const TOKEN = localStorage.getItem('admin_token') || prompt('Enter admin token:')
-    if (TOKEN) localStorage.setItem('admin_token', TOKEN)
+    let TOKEN = localStorage.getItem('admin_token') || ''
+    // Administrator display name recorded on actions. Never send the token as an identity.
+    const ADMIN_NAME = localStorage.getItem('admin_name') || prompt('Admin name (for audit log):') || 'admin'
+    if (ADMIN_NAME) localStorage.setItem('admin_name', ADMIN_NAME)
     function headers() { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` } }
+
+    // Ask for the admin token. If a valid one is cached we skip the prompt.
+    function ensureToken() {
+      if (TOKEN) return TOKEN
+      const entered = prompt('Enter admin token:')
+      if (entered) { TOKEN = entered.trim(); localStorage.setItem('admin_token', TOKEN) }
+      return TOKEN
+    }
 
     let allRequests = []
     let allPasscodes = []
     let auditEntries = []
 
     async function api(path, opts={}) {
+      ensureToken()
       const res = await fetch(`${API}${path}`, { headers: headers(), ...opts })
-      if (res.status === 401) { toast('Unauthorized - reba admin token', 'error'); throw new Error('unauthorized') }
+      if (res.status === 401) {
+        // Credentials changed on the server: drop the cached token and ask again.
+        localStorage.removeItem('admin_token')
+        TOKEN = ''
+        toast('Token yawe ntikibaho. Ongera uyinjize.', 'error')
+        ensureToken()
+        if (TOKEN) {
+          const retry = await fetch(`${API}${path}`, { headers: headers(), ...opts })
+          if (retry.status === 401) { toast('Token ntiyemewe', 'error'); throw new Error('unauthorized') }
+          const data = await retry.json()
+          if (!retry.ok && !opts.dontThrow) { toast(data.error || 'Error', 'error'); throw new Error(data.error || 'error') }
+          return data
+        }
+        throw new Error('unauthorized')
+      }
       const data = await res.json()
       if (!res.ok && !opts.dontThrow) { toast(data.error || 'Error', 'error'); throw new Error(data.error || 'error') }
       return data
@@ -616,7 +641,7 @@
     async function runApprove(id) {
       toast('Verifying payment...', '')
       try {
-        const data = await api(`/v1/admin/payment-requests/${id}/approve`, { method: 'POST', body: JSON.stringify({ verifiedBy: TOKEN }) })
+        const data = await api(`/v1/admin/payment-requests/${id}/approve`, { method: 'POST', body: JSON.stringify({ verifiedBy: ADMIN_NAME }) })
         toast('Payment verified ✓', 'success')
         await loadRequests(true)
         if (data.passcode) {
@@ -655,7 +680,7 @@
           const expired = !p.blocked && new Date(p.expires_at) < now
           const status = p.blocked ? 'revoked' : expired ? 'expired' : 'active'
           return `<tr>
-            <td><span class="code">${p.code}</span></td>
+            <td><span class="code">${p.code_masked}</span></td>
             <td><span class="badge ${p.type==='personal'?'approved':'active'}">${p.type}</span></td>
             <td>${new Date(p.created_at).toLocaleDateString()}</td>
             <td><span class="badge ${status}">${p.blocked?'Revoked':expired?'Expired':'Active'}</span></td>

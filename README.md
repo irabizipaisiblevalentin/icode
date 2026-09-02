@@ -32,6 +32,8 @@ Set `ICODE_ACCESS_DURATION_DAYS` to override how long new passcodes last (defaul
 | `ADMIN_TOKEN` | Yes | `icode-admin-secret` | Admin API/dashboard auth |
 | `WEBHOOK_SECRET` | Yes | — | Auth for the form webhook |
 | `ICODE_ACCESS_DURATION_DAYS` | No | `30` | Passcode validity in days |
+| `NOTIFICATION_WEBHOOK_URL` | No | — | Outbound channel to deliver passcodes (Telegram/email relay/etc.) |
+| `NOTIFICATION_WEBHOOK_TOKEN` | No | — | Optional bearer token for that outbound channel |
 | `PORT` | No | `4097` | HTTP port |
 | `DATA_DIR` | No | current dir | Where `icode-control.db` lives |
 | `DB_PATH` | No | derived | Override the full DB path |
@@ -53,10 +55,15 @@ Approval is always manual — a form submission alone never grants access.
 
 ## Security notes
 
-- Passcodes use cryptographically random characters (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`).
+- Passcodes use cryptographically random characters (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`) via `crypto.randomInt` (CSPRNG).
+- Passcodes are stored hashed (SHA-256) and looked up by hash. The raw code is
+  returned exactly once, at creation, and never in list endpoints; the hash is
+  never exposed.
 - `/v1/passcode/validate` is rate-limited per machine (10/min).
 - Webhook requests are rejected without a valid token; amounts must equal 1,000.
 - Admin routes are server-side protected by `ADMIN_TOKEN` — not just hidden in the UI.
+- The admin token is never logged or stored as an actor; the dashboard sends a
+  non-secret admin display name for the audit trail.
 - An audit log records PAYMENT_APPROVED, PASSCODE_CREATED, PASSCODE_REVOKED, etc.
 - Never send/request MTN/Bank PINs, passwords, or OTPs.
 

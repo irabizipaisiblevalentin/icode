@@ -1,6 +1,10 @@
 /**
  * iCode — Google Forms → iCode Backend Bridge
  * ===========================================
+ * TEMPLATE — copy this to form-bridge.gs and fill in the SECRET.
+ *
+ * The real form-bridge.gs is gitignored because it contains the live
+ * WEBHOOK_SECRET. Keep your real copy out of version control.
  *
  * PURPOSE
  * Google Forms do not send webhooks natively. The standard solution is to
@@ -11,9 +15,8 @@
  * 1. Open the Google Sheet that collects your form responses.
  * 2. Menu: Extensions → Apps Script.
  * 3. Delete the placeholder code and paste the contents of this file.
- * 4. Replace the two constants below with your real values:
- *      WEBHOOK_URL   — your icode-control server base URL, e.g. https://your-host
- *      WEBHOOK_TOKEN — the value of the WEBHOOK_SECRET env var on the server.
+ * 4. Replace WEBHOOK_TOKEN below with the real WEBHOOK_SECRET env var on the
+ *    server (Web: https://icode-s05p.onrender.com).
  * 5. Save. Then choose the `onFormSubmit` function and run it once to
  *    authorize the script (it will ask for permissions).
  * 6. Menu: Triggers → Add Trigger →
@@ -27,8 +30,9 @@
  * form (they appear in the same order as the questions).
  */
 // ⚠️ EDIT THESE:
-var WEBHOOK_URL = "https://REPLACE-WITH-YOUR-SERVER/v1/webhook/form"
-var WEBHOOK_TOKEN = "REPLACE-WITH-YOUR-WEBHOOK-SECRET"
+var WEBHOOK_URL = "https://icode-s05p.onrender.com/v1/webhook/form"
+// Replace with the server's WEBHOOK_SECRET. /!\ NEVER COMMIT THE REAL VALUE.
+var WEBHOOK_TOKEN = "REPLACE_WITH_WEBHOOK_SECRET"
 
 /**
  * Triggered automatically when the form is submitted.

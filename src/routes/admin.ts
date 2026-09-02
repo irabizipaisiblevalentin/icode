@@ -15,9 +15,12 @@ import {
   listCustomers,
   updateCustomerNotes,
   deleteCustomer,
+  maskCode,
+  toCreatedPasscode,
   type PasscodeRow,
   type InstallRow,
   type CustomerRow,
+  type PasscodeCreatedView,
 } from "../db"
 import { createPublicCode, createPersonalCode } from "./client"
 
@@ -33,12 +36,42 @@ export function isAdminAuth(request: Request): boolean {
 
 // ─── Passcode Management ──────────────────────────────────────────────
 
+export interface AdminPasscodeView {
+  id: string
+  code_masked: string
+  type: "public" | "personal"
+  created_at: string
+  expires_at: string
+  max_uses: number | null
+  current_uses: number
+  blocked: number
+  note: string | null
+  payment_request_id: string | null
+}
+
 export interface AdminPasscodeListResponse {
-  passcodes: PasscodeRow[]
+  passcodes: AdminPasscodeView[]
+}
+
+// The admin list never returns the raw passcode or its hash. The full code is
+// shown to the user exactly once, at creation time.
+function toAdminPasscode(p: PasscodeRow): AdminPasscodeView {
+  return {
+    id: p.id,
+    code_masked: maskCode(p.code),
+    type: p.type,
+    created_at: p.created_at,
+    expires_at: p.expires_at,
+    max_uses: p.max_uses,
+    current_uses: p.current_uses,
+    blocked: p.blocked,
+    note: p.note,
+    payment_request_id: p.payment_request_id,
+  }
 }
 
 export function adminListPasscodes(): AdminPasscodeListResponse {
-  return { passcodes: listPasscodes() }
+  return { passcodes: listPasscodes().map(toAdminPasscode) }
 }
 
 export interface AdminPasscodeCreateRequest {
@@ -48,13 +81,15 @@ export interface AdminPasscodeCreateRequest {
   note?: string
 }
 
-export function adminCreatePasscode(req: AdminPasscodeCreateRequest): PasscodeRow {
-  return createPasscode({
-    type: req.type,
-    expires_at: req.expires_at,
-    max_uses: req.max_uses,
-    note: req.note,
-  })
+export function adminCreatePasscode(req: AdminPasscodeCreateRequest): PasscodeCreatedView {
+  return toCreatedPasscode(
+    createPasscode({
+      type: req.type,
+      expires_at: req.expires_at,
+      max_uses: req.max_uses,
+      note: req.note,
+    }),
+  )
 }
 
 export interface AdminBlockResponse {
@@ -104,14 +139,14 @@ export function adminDeleteInstall(id: string): AdminBlockResponse {
 
 // ─── Passcode Generation Helpers ──────────────────────────────────────
 
-export function adminGeneratePublicCode(weeksValid: number = 3): PasscodeRow {
+export function adminGeneratePublicCode(weeksValid: number = 3): PasscodeCreatedView {
   const expiresAt = new Date(Date.now() + weeksValid * 7 * 24 * 60 * 60 * 1000).toISOString()
-  return createPublicCode(expiresAt, `Public code - ${weeksValid} weeks`)
+  return toCreatedPasscode(createPublicCode(expiresAt, `Public code - ${weeksValid} weeks`))
 }
 
-export function adminGeneratePersonalCode(daysValid: number = 30): PasscodeRow {
+export function adminGeneratePersonalCode(daysValid: number = 30): PasscodeCreatedView {
   const expiresAt = new Date(Date.now() + daysValid * 24 * 60 * 60 * 1000).toISOString()
-  return createPersonalCode(expiresAt, undefined, `Personal code - ${daysValid} days`)
+  return toCreatedPasscode(createPersonalCode(expiresAt, undefined, `Personal code - ${daysValid} days`))
 }
 
 // ─── Customer Passcode Issuance ───────────────────────────────────────
@@ -127,7 +162,7 @@ export interface IssuePasscodeRequest {
 
 export interface IssuePasscodeResponse {
   ok: boolean
-  passcode: PasscodeRow
+  passcode: PasscodeCreatedView
   customer: CustomerRow
   renewed: boolean
   message: string
@@ -153,7 +188,7 @@ export function adminIssuePasscode(req: IssuePasscodeRequest): IssuePasscodeResp
     })
     linkCustomerPasscode(existing.id, passcode.id)
     if (req.name) updateCustomerNotes(existing.id, req.notes ?? null)
-    return { ok: true, passcode, customer: existing, renewed: true, message: "Passcode renewed." }
+    return { ok: true, passcode: toCreatedPasscode(passcode), customer: existing, renewed: true, message: "Passcode renewed." }
   }
 
   // New customer → create both
@@ -170,7 +205,7 @@ export function adminIssuePasscode(req: IssuePasscodeRequest): IssuePasscodeResp
     passcode_id: passcode.id,
     notes: req.notes,
   })
-  return { ok: true, passcode, customer, renewed: false, message: "Passcode issued." }
+  return { ok: true, passcode: toCreatedPasscode(passcode), customer, renewed: false, message: "Passcode issued." }
 }
 
 // ─── Customers ────────────────────────────────────────────────────────

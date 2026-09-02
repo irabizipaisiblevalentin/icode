@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite"
-import { randomUUID } from "crypto"
+import { createHash, randomInt, randomUUID } from "crypto"
 import { mkdirSync } from "fs"
 import { join } from "path"
 
@@ -38,6 +38,7 @@ function init(db: Database) {
     CREATE TABLE IF NOT EXISTS passcodes (
       id TEXT PRIMARY KEY,
       code TEXT UNIQUE NOT NULL,
+      code_hash TEXT UNIQUE NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('public','personal')),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       expires_at TEXT NOT NULL,
@@ -125,10 +126,18 @@ function init(db: Database) {
   db.run(`CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_passcodes_payment ON passcodes(payment_request_id)`)
 
-  // Migration: add payment_request_id column to existing passcodes tables
+  // Migrations for passcodes created by earlier versions of the table
   const cols = db.query(`PRAGMA table_info(passcodes)`).all() as { name: string }[]
   if (!cols.some((c) => c.name === "payment_request_id")) {
     db.run(`ALTER TABLE passcodes ADD COLUMN payment_request_id TEXT`)
+  }
+  if (!cols.some((c) => c.name === "code_hash")) {
+    db.run(`ALTER TABLE passcodes ADD COLUMN code_hash TEXT`)
+    // Backfill hashes for any pre-existing plaintext codes.
+    const rows = db.query<{ id: string; code: string }, []>(`SELECT id, code FROM passcodes WHERE code_hash IS NULL`).all()
+    for (const row of rows) {
+      db.run(`UPDATE passcodes SET code_hash = ? WHERE id = ?`, [hashCode(row.code), row.id])
+    }
   }
 }
 
@@ -137,6 +146,7 @@ function init(db: Database) {
 export interface PasscodeRow {
   id: string
   code: string
+  code_hash: string
   type: "public" | "personal"
   created_at: string
   expires_at: string
@@ -159,8 +169,8 @@ export function createPasscode(opts: {
   const id = randomUUID()
   const code = opts.code ?? randomCode()
   d.run(
-    `INSERT INTO passcodes (id, code, type, expires_at, max_uses, note, payment_request_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, code, opts.type, opts.expires_at, opts.max_uses ?? null, opts.note ?? null, opts.payment_request_id ?? null],
+    `INSERT INTO passcodes (id, code, code_hash, type, expires_at, max_uses, note, payment_request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, code, hashCode(code), opts.type, opts.expires_at, opts.max_uses ?? null, opts.note ?? null, opts.payment_request_id ?? null],
   )
   return getPasscode(id)!
 }
@@ -170,7 +180,8 @@ export function getPasscode(id: string): PasscodeRow | null {
 }
 
 export function findPasscodeByCode(code: string): PasscodeRow | null {
-  return db().query<PasscodeRow, [string]>(`SELECT * FROM passcodes WHERE code = ?`).get(code) ?? null
+  const hash = hashCode(code)
+  return db().query<PasscodeRow, [string]>(`SELECT * FROM passcodes WHERE code_hash = ?`).get(hash) ?? null
 }
 
 export function listPasscodes(): PasscodeRow[] {
@@ -406,6 +417,7 @@ export function createPaymentRequest(input: PaymentRequestInput): { request: Pay
   const duplicate = findDuplicatePayment(input.transactionReference, input.paymentMethod, input.paymentAmount, input.email)
   const id = randomUUID()
   const ref = input.transactionReference ?? null
+  const method = (input.paymentMethod ?? "other").trim() || "other"
   d.run(
     `INSERT INTO payment_requests (id, full_name, email, phone_number, payment_method, transaction_reference, payment_amount, payment_date, payment_time, payment_proof, is_duplicate)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -414,7 +426,7 @@ export function createPaymentRequest(input: PaymentRequestInput): { request: Pay
       input.fullName,
       input.email ?? null,
       input.phoneNumber ?? null,
-      input.paymentMethod ?? null,
+      method,
       ref,
       input.paymentAmount ?? null,
       input.paymentDate ?? null,
@@ -500,21 +512,67 @@ export function listAuditLog(): AuditLogRow[] {
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
+export function hashCode(code: string): string {
+  return createHash("sha256").update(code).digest("hex")
+}
+
+export function maskCode(code: string): string {
+  const segments = code.split("-")
+  if (segments.length < 2) return "••••"
+  const head = segments[0]
+  const tail = segments.slice(1).map(() => "••••").join("-")
+  return `${head}-${tail}`
+}
+
+// The raw passcode is returned exactly once, when it is first created; the
+// stored hash is never included in any API response.
+export interface PasscodeCreatedView {
+  id: string
+  code: string
+  type: "public" | "personal"
+  created_at: string
+  expires_at: string
+  max_uses: number | null
+  current_uses: number
+  blocked: number
+  note: string | null
+  payment_request_id: string | null
+}
+
+export function toCreatedPasscode(p: PasscodeRow): PasscodeCreatedView {
+  return {
+    id: p.id,
+    code: p.code,
+    type: p.type,
+    created_at: p.created_at,
+    expires_at: p.expires_at,
+    max_uses: p.max_uses,
+    current_uses: p.current_uses,
+    blocked: p.blocked,
+    note: p.note,
+    payment_request_id: p.payment_request_id,
+  }
+}
+
+const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+function randomCodeChar(): string {
+  return CODE_CHARS[randomInt(CODE_CHARS.length)]
+}
+
 export function randomCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
   let code = ""
   for (let i = 0; i < 12; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)]
+    code += randomCodeChar()
     if (i === 3 || i === 7) code += "-"
   }
   return code
 }
 
 export function randomAccessCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
   const block = () => {
     let s = ""
-    for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)]
+    for (let i = 0; i < 4; i++) s += randomCodeChar()
     return s
   }
   return `ICODE-${block()}-${block()}`

@@ -21,6 +21,7 @@ import {
   type PasscodeRow,
   type CustomerRow,
 } from "../db"
+import { sendPasscodeNotification } from "../notify"
 
 // ─── Webhook: receive an external form submission ─────────────────────
 
@@ -69,7 +70,11 @@ function validateWebhookInput(input: WebhookFormInput): string[] {
   if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) errors.push("email is invalid")
   if (input.phoneNumber && !/^[+0-9][0-9\s\-()]{6,}$/.test(input.phoneNumber.trim())) errors.push("phoneNumber is invalid")
   const allowedMethods = ["MTN_MOMO", "BK_BANK", "momo", "bank", "other"]
-  if (input.paymentMethod && !allowedMethods.includes(input.paymentMethod)) errors.push("paymentMethod is not allowed")
+  if (!input.paymentMethod || !input.paymentMethod.trim()) {
+    errors.push("paymentMethod is required")
+  } else if (!allowedMethods.includes(input.paymentMethod)) {
+    errors.push("paymentMethod is not allowed")
+  }
   if (input.paymentAmount !== undefined && input.paymentAmount !== null && Number(input.paymentAmount) !== PAYMENT_AMOUNT_RWF) {
     errors.push(`paymentAmount must equal ${PAYMENT_AMOUNT_RWF}`)
   }
@@ -135,6 +140,16 @@ export function adminApprovePaymentRequest(id: string, req: ApproveRequest): App
   writeAudit("PAYMENT_APPROVED", actor, request.id, { reference: request.transaction_reference })
   writeAudit("PASSCODE_CREATED", actor, passcode.id, { paymentRequestId: id })
   writeAudit("ACCESS_GRANTED", actor, passcode.id, { expiry: expiresAt })
+
+  // Deliver the passcode to the user if an outbound channel is configured.
+  void sendPasscodeNotification({
+    userId: id,
+    name: request.full_name,
+    email: request.email,
+    phone: request.phone_number,
+    passcode: code,
+    expiresAt,
+  }).catch(() => {})
 
   return {
     ok: true,

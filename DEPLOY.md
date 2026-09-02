@@ -10,6 +10,8 @@ The server is a zero-dependency Bun + SQLite app in a single small container.
 | `ADMIN_TOKEN` | **Yes** | The password for your admin dashboard (`/admin`). Make it long and random. There is a weak default (`icode-admin-secret`) — you MUST set a real one. |
 | `WEBHOOK_SECRET` | **Yes** | Shared secret used by the payment form bridge to authenticate webhook submissions. No form data is accepted without it. |
 | `ICODE_ACCESS_DURATION_DAYS` | No | How many days a new approved passcode lasts (default `30`). |
+| `NOTIFICATION_WEBHOOK_URL` | No | Optional outbound channel for delivering generated passcodes to users (e.g. a Telegram bot / email relay). Nothing is sent if unset. |
+| `NOTIFICATION_WEBHOOK_TOKEN` | No | Optional bearer token for the outbound notification channel. |
 | `PORT` | No | HTTP port the container listens on (default 8080). Providers inject their own; on Fly use `fly.toml`. |
 | `DATA_DIR` | No | Directory for the SQLite DB. Defaults to the app dir; **point it at a persistent volume** so your passcodes survive restarts/deploys. |
 
@@ -56,6 +58,8 @@ Admin dashboard: `https://<app>.fly.dev/admin`
 3. Add a **Disk** mounted at `/app/data`.
 4. Env: `ADMIN_TOKEN`, `DATA_DIR=/app/data`, `PORT=8080`.
 5. URL like `https://icode-control.onrender.com` → dashboard at `/admin`.
+   Production URL for this project: **https://icode-2.onrender.com** (admin at
+   `https://icode-2.onrender.com/admin`).
 
 ---
 
@@ -103,8 +107,9 @@ Google Forms don't send webhooks. Link the form to a Google Sheet, then:
 
 1. Open the sheet → Extensions → Apps Script.
 2. Paste the contents of `scripts/form-bridge.gs`.
-3. Set `WEBHOOK_URL` to `https://<your-host>/v1/webhook/form` and
-   `WEBHOOK_TOKEN` to your `WEBHOOK_SECRET`.
+3. This repo's `scripts/form-bridge.gs` is pre-set for
+   `WEBHOOK_URL = https://icode-2.onrender.com/v1/webhook/form` and
+   `WEBHOOK_TOKEN = <the WEBHOOK_SECRET you set on Render>`. Keep them in sync.
 4. Adjust the `mapColumns()` function so the column indices match your form.
 5. Save, run `onFormSubmit` once to authorize, then add a Trigger:
    **On form submit** → `onFormSubmit`.

@@ -44,7 +44,7 @@ switch (cmd) {
   }
   case "list": {
     const data = await api("/v1/admin/passcodes") as { passcodes: any[] }
-    console.table(data.passcodes.map((p) => ({ code: p.code, type: p.type, blocked: !!p.blocked, uses: `${p.current_uses}${p.max_uses ? "/" + p.max_uses : ""}`, expires: p.expires_at })))
+    console.table(data.passcodes.map((p) => ({ code: p.code_masked, type: p.type, blocked: !!p.blocked, uses: `${p.current_uses}${p.max_uses ? "/" + p.max_uses : ""}`, expires: p.expires_at })))
     break
   }
   case "installs": {
