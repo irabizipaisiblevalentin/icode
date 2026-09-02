@@ -18,6 +18,17 @@ import {
   type AdminPasscodeCreateRequest,
   type IssuePasscodeRequest,
 } from "./routes/admin"
+import {
+  handleFormWebhook,
+  adminApprovePaymentRequest,
+  adminRejectPaymentRequest,
+  adminRevokePasscode,
+  adminReactivatePasscode,
+  type WebhookFormInput,
+  type ApproveRequest,
+} from "./routes/payments"
+import { listPaymentRequests, getPaymentRequest, getPaymentStats, listAuditLog, isValidWebhook } from "./db"
+import { hitRateLimit } from "./rate-limit"
 
 const PORT = parseInt(process.env.PORT ?? "4097")
 const DASHBOARD_PATH = new URL("../public/index.html", import.meta.url).pathname
@@ -26,7 +37,7 @@ function corsHeaders(): HeadersInit {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-webhook-token",
   }
 }
 
@@ -75,15 +86,29 @@ const server = Bun.serve({
       return json(result, result.ok ? 200 : 403)
     }
 
+    // ── Webhook: external form submission (Google Forms / Apps Script) ─
+    if (path === "/v1/webhook/form" && method === "POST") {
+      const limiter = hitRateLimit("webhook:form", 60, 60_000)
+      if (!limiter.allowed) {
+        return json({ ok: false, error: "Rate limited. Try again shortly." }, 429)
+      }
+      if (!isValidWebhook(request)) {
+        return json({ ok: false, error: "Invalid webhook token." }, 401)
+      }
+      const body = await parseBody<WebhookFormInput>(request)
+      const result = handleFormWebhook(body)
+      return json(result, result.ok ? 201 : 400)
+    }
+
     // ── Health check ──────────────────────────────────────────────────
 
     if (path === "/v1/health") {
       return json({ ok: true, timestamp: new Date().toISOString() })
     }
 
-    // ── Dashboard (admin UI) ──────────────────────────────────────────
+    // ── Web UI (access page + admin dashboard SPA) ────────────────────
 
-    if (path === "/admin" || path === "/admin/") {
+    if (path === "/" || path === "/access" || path === "/admin" || path === "/admin/") {
       return new Response(Bun.file(DASHBOARD_PATH), {
         headers: { "Content-Type": "text/html" },
       })
@@ -94,6 +119,42 @@ const server = Bun.serve({
     if (path.startsWith("/v1/admin/")) {
       if (!isAdminAuth(request)) {
         return json({ error: "Unauthorized" }, 401)
+      }
+
+      // Dashboard statistics
+      if (path === "/v1/admin/dashboard/stats" && method === "GET") {
+        return json(getPaymentStats())
+      }
+
+      // Audit log
+      if (path === "/v1/admin/audit-log" && method === "GET") {
+        return json({ entries: listAuditLog() })
+      }
+
+      // Payment requests
+      if (path === "/v1/admin/payment-requests" && method === "GET") {
+        return json({ requests: listPaymentRequests() })
+      }
+
+      const approveMatch = path.match(/^\/v1\/admin\/payment-requests\/([^/]+)\/approve$/)
+      if (approveMatch && method === "POST") {
+        const body = await parseBody<ApproveRequest>(request)
+        const result = adminApprovePaymentRequest(approveMatch[1], body)
+        return json(result, result.ok ? 200 : 400)
+      }
+
+      const rejectMatch = path.match(/^\/v1\/admin\/payment-requests\/([^/]+)\/reject$/)
+      if (rejectMatch && method === "POST") {
+        const body = await parseBody<{ adminNote?: string }>(request)
+        const result = adminRejectPaymentRequest(rejectMatch[1], body.adminNote)
+        return json(result, result.ok ? 200 : 400)
+      }
+
+      const paymentMatch = path.match(/^\/v1\/admin\/payment-requests\/([^/]+)$/)
+      if (paymentMatch && method === "GET") {
+        const req = getPaymentRequest(paymentMatch[1])
+        if (!req) return json({ error: "Payment request not found" }, 404)
+        return json({ request: req })
       }
 
       // Passcodes
@@ -126,6 +187,12 @@ const server = Bun.serve({
       const passcodeMatch = path.match(/^\/v1\/admin\/passcodes\/([^/]+)$/)
       if (passcodeMatch) {
         const id = passcodeMatch[1]
+        if (path.endsWith("/revoke") && method === "POST") {
+          return json(adminRevokePasscode(id))
+        }
+        if (path.endsWith("/reactivate") && method === "POST") {
+          return json(adminReactivatePasscode(id))
+        }
         if (method === "PATCH") {
           const body = await parseBody<{ blocked?: boolean }>(request)
           if (body.blocked === true) return json(adminBlockPasscode(id))

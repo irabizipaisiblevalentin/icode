@@ -1,319 +1,759 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="rw">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iCode Admin Dashboard</title>
+  <title>iCode · by Irabizi Paisible Valentin</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
-    .container { max-width: 1200px; margin: 0 auto; }
-    h1 { color: #00ff88; margin-bottom: 20px; font-size: 24px; }
-    h2 { color: #888; margin: 30px 0 15px; font-size: 18px; }
-    .card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
-    .input-group { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
-    input, select { background: #0d0d0d; border: 1px solid #444; color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 14px; }
-    input:focus, select:focus { outline: none; border-color: #00ff88; }
-    button { background: #00ff88; color: #000; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; }
-    button:hover { background: #00cc6a; }
-    button.danger { background: #ff4444; color: #fff; }
-    button.danger:hover { background: #cc0000; }
-    button.secondary { background: #333; color: #fff; }
-    button.secondary:hover { background: #444; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; font-size: 13px; }
-    th { color: #888; font-weight: 600; }
-    tr:hover { background: #1a1a1a; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
-    .badge.public { background: #00ff88; color: #000; }
-    .badge.personal { background: #0088ff; color: #fff; }
-    .badge.blocked { background: #ff4444; color: #fff; }
-    .badge.active { background: #00ff88; color: #000; }
-    .code { font-family: monospace; background: #0d0d0d; padding: 2px 6px; border-radius: 4px; }
-    .status { margin-top: 10px; padding: 10px; border-radius: 6px; }
-    .status.success { background: #003300; border: 1px solid #00ff88; color: #00ff88; }
-    .status.error { background: #330000; border: 1px solid #ff4444; color: #ff4444; }
-    #status { display: none; }
-    .actions { display: flex; gap: 8px; }
+    :root {
+      --bg: #0a0a0a; --panel: #141414; --panel2: #1a1a1a; --border: #2a2a2a;
+      --text: #e0e0e0; --muted: #8a8a8a; --accent: #00ff88; --accent-dim: #00cc6a;
+      --danger: #ff4444; --danger-dim: #cc0000; --warn: #ffcc00; --blue: #0088ff;
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    .lockup { display: flex; align-items: center; gap: 12px; }
+    .lockup .logo {
+      width: 34px; height: 34px; border-radius: 8px; background: var(--accent);
+      color: #000; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px;
+    }
+    .lockup .brand { font-weight: 700; font-size: 20px; letter-spacing: .5px; }
+    .lockup .brand .by { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+    h1 { color: var(--accent); font-size: 22px; }
+    h2 { color: var(--muted); font-size: 15px; margin: 0 0 14px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+    input, select, textarea {
+      background: #0d0d0d; border: 1px solid #333; color: #fff; padding: 11px 14px;
+      border-radius: 8px; font-size: 14px; width: 100%;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    .input-group { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .input-group input, .input-group select { width: auto; flex: 1; min-width: 140px; }
+    button {
+      background: var(--accent); color: #000; border: none; padding: 11px 20px; border-radius: 8px;
+      cursor: pointer; font-weight: 700; font-size: 14px; transition: transform .05s ease, background .15s ease;
+    }
+    button:hover { background: var(--accent-dim); }
+    button:active { transform: scale(.98); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.danger { background: var(--danger); color: #fff; }
+    button.danger:hover { background: var(--danger-dim); }
+    button.secondary { background: #2a2a2a; color: #fff; }
+    button.secondary:hover { background: #343434; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .badge.pending { background: #3a2d00; color: var(--warn); border: 1px solid #5c4a00; }
+    .badge.approved { background: #003300; color: var(--accent); border: 1px solid #005c00; }
+    .badge.rejected { background: #330000; color: var(--danger); border: 1px solid #5c0000; }
+    .badge.active { background: #003300; color: var(--accent); border: 1px solid #005c00; }
+    .badge.expired { background: #2b2b2b; color: var(--muted); }
+    .badge.revoked { background: #330000; color: var(--danger); border: 1px solid #5c0000; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #0d0d0d; padding: 2px 8px; border-radius: 6px; letter-spacing: 1px; }
+    .status { margin-top: 12px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
+    .status.success { display: block; background: #003300; border: 1px solid var(--accent); color: var(--accent); }
+    .status.error { display: block; background: #330000; border: 1px solid var(--danger); color: var(--danger); }
+    .status.warn { display: block; background: #332800; border: 1px solid var(--warn); color: var(--warn); }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+    th { color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .actions button { padding: 7px 12px; font-size: 12px; }
+    .search-row { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+    .search-row input { max-width: 320px; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+    .filters button { background: #1c1c1c; color: var(--muted); padding: 8px 14px; font-size: 13px; }
+    .filters button.active { background: var(--accent); color: #000; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .stat { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+    .stat .value { font-size: 28px; font-weight: 800; color: #fff; margin-top: 4px; }
+    .stat .value.accent { color: var(--accent); }
+    .stat .value.warn { color: var(--warn); }
+    .stat .value.danger { color: var(--danger); }
+    .empty { color: var(--muted); text-align: center; padding: 30px; font-size: 14px; }
+    .spinner {
+      width: 18px; height: 18px; border: 3px solid rgba(0,255,136,.2); border-top-color: var(--accent);
+      border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 100;
+    }
+    .overlay.show { display: flex; }
+    .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 460px; width: 90%; }
+    .modal h3 { margin-bottom: 10px; font-size: 17px; }
+    .modal p { color: var(--muted); font-size: 14px; margin-bottom: 16px; line-height: 1.5; }
+    .modal .actions { justify-content: flex-end; margin: 0; }
+    .modal .big-code { font-size: 22px; letter-spacing: 2px; text-align: center; padding: 16px; background: #0d0d0d; border: 1px dashed var(--accent); border-radius: 10px; margin: 10px 0; }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--panel2); border: 1px solid var(--border); color: var(--text); padding: 12px 20px;
+      border-radius: 10px; opacity: 0; transition: all .25s ease; z-index: 200; font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.5);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.success { border-color: var(--accent); }
+    .toast.error { border-color: var(--danger); }
+    .toast.warn { border-color: var(--warn); }
+
+    /* ─── Access page ─── */
+    .access-shell { min-height: 100vh; display: flex; flex-direction: column; }
+    .access-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 26px; border-bottom: 1px solid var(--border); }
+    .access-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 30px 20px; }
+    .access-box { max-width: 460px; width: 100%; }
+    .access-title { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .access-title .accent { color: var(--accent); }
+    .access-sub { color: var(--muted); font-size: 15px; margin-bottom: 26px; line-height: 1.5; }
+    .access-input {
+      font-family: ui-monospace, monospace; font-size: 20px; letter-spacing: 2px; text-align: center;
+      padding: 16px; border-radius: 10px; border: 1px solid #333; background: #0d0d0d; color: #fff; width: 100%; margin-bottom: 14px;
+    }
+    .access-input:focus { border-color: var(--accent); }
+    .access-btn { width: 100%; padding: 15px; font-size: 16px; }
+    .access-alternate { text-align: center; margin-top: 24px; color: var(--muted); font-size: 14px; }
+    .access-alternate a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    .access-alternate a:hover { text-decoration: underline; }
+    .pay-info { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-top: 26px; }
+    .pay-info h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 12px; }
+    .pay-row { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 10px; font-size: 14px; }
+    .pay-row .lbl { color: var(--muted); }
+    .pay-row .val { font-weight: 600; text-align: right; }
+    .pay-row .val .code-sm { font-family: monospace; }
+    .result-panel { margin-top: 10px; border-radius: 10px; padding: 16px; text-align: center; font-size: 15px; line-height: 1.5; display: none; }
+    .result-panel.show { display: block; }
+    .result-panel.success { background: #003300; border: 1px solid var(--accent); color: var(--accent); }
+    .result-panel.error { background: #330000; border: 1px solid var(--danger); color: var(--danger); }
+    .result-panel.info { background: #1a1600; border: 1px solid var(--warn); color: var(--warn); }
+    .copied { font-size: 12px; color: var(--accent); }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+    .tab { background: transparent; color: var(--muted); padding: 12px 18px; border-radius: 0; border-bottom: 2px solid transparent; font-weight: 600; }
+    .tab:hover { background: transparent; color: #fff; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .hidden { display: none !important; }
+    .step { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: var(--muted); font-size: 14px; }
+    .step .dot { width: 22px; height: 22px; border-radius: 50%; background: #222; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+    .step.done { color: var(--accent); }
+    .step.done .dot { background: var(--accent); color: #000; }
+    .admin-nav { display: flex; gap: 16px; }
+    .admin-nav a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; }
+    .admin-nav a:hover, .admin-nav a.active { color: var(--accent); }
+    @media (max-width: 640px) {
+      .input-group input, .input-group select { width: 100%; flex: none; }
+      .access-box { padding: 0 10px; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🛡 iCode Admin Dashboard</h1>
+  <!-- ═══════════ ACCESS PAGE / USER ═══════════ -->
+  <div id="view-access" class="access-shell hidden">
+    <header class="access-header">
+      <div class="lockup">
+        <div class="logo">i</div>
+        <div class="brand">iCode<span class="by">by Irabizi Paisible Valentin</span></div>
+      </div>
+      <a href="/admin" style="color:var(--muted);font-size:13px;text-decoration:none">Admin</a>
+    </header>
+    <main class="access-main">
+      <div class="access-box">
+        <div class="access-title">Murakaza neza kuri <span class="accent">iCode</span></div>
+        <div class="access-sub">Shyiramo Passcode yawe kugira ngo utangire gukoresha iCode.</div>
 
-    <div id="status" class="status"></div>
+        <input id="access-input" class="access-input" type="text" placeholder="ICODE-XXXX-XXXX" autocomplete="off" spellcheck="false" inputmode="text">
+        <button id="access-btn" class="access-btn">Komeza kuri iCode</button>
 
-    <div class="card">
-      <h2>Generate Passcode</h2>
-      <div class="input-group">
-        <select id="type">
-          <option value="public">Public (3 weeks free)</option>
-          <option value="personal">Personal (paid)</option>
-        </select>
-        <input type="text" id="note" placeholder="Note (optional)">
-        <button onclick="generatePasscode()">Generate</button>
+        <div id="access-result" class="result-panel"></div>
+
+        <div class="access-alternate">
+          Nta Passcode ufite?
+          <a href="https://forms.gle/48iUwJ2nCBU6uwQc8" target="_blank" rel="noopener">Kwishyura hano &amp; ohereza uburyo bwo kwishyura</a>
+        </div>
+
+        <div class="pay-info">
+          <h3>Kwishyura · 1,000 RWF</h3>
+          <div class="pay-row"><span class="lbl">MTN MoMo</span><span class="val"><span class="code-sm">1787240</span> · Paisible Valentin</span></div>
+          <div class="pay-row"><span class="lbl">BK Bank</span><span class="val"><span class="code-sm">100269073874</span> · Paisible Valentin Irabizi</span></div>
+          <div class="pay-row" style="margin-top:6px;border-top:1px solid var(--border);padding-top:10px"><span class="lbl">Required</span><span class="val" style="color:var(--accent)">1,000 RWF</span></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ═══════════ ADMIN DASHBOARD ═══════════ -->
+  <div id="view-admin" class="container hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+      <div class="lockup">
+        <div class="logo">i</div>
+        <div class="brand">iCode<span class="by">Admin · by Irabizi Paisible Valentin</span></div>
+      </div>
+      <nav class="admin-nav">
+        <a href="#" data-tab="dashboard" class="active">Dashboard</a>
+        <a href="#" data-tab="requests">Payment Requests</a>
+        <a href="#" data-tab="passcodes">Passcodes</a>
+        <a href="#" data-tab="tools">Tools</a>
+        <a href="#" data-tab="audit">Audit Log</a>
+      </nav>
+    </div>
+
+    <!-- Stats -->
+    <div id="tab-dashboard">
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat"><div class="label">Total Requests</div><div class="value" id="st-total">-</div></div>
+        <div class="stat"><div class="label">Pending</div><div class="value warn" id="st-pending">-</div></div>
+        <div class="stat"><div class="label">Approved</div><div class="value accent" id="st-approved">-</div></div>
+        <div class="stat"><div class="label">Rejected</div><div class="value danger" id="st-rejected">-</div></div>
+        <div class="stat"><div class="label">Active Passcodes</div><div class="value accent" id="st-active">-</div></div>
+        <div class="stat"><div class="label">Expired Passcodes</div><div class="value" id="st-expired">-</div></div>
+      </div>
+      <div class="card">
+        <h2>Ubusabe bunyamakuru (Payment Requests)</h2>
+        <div class="search-row">
+          <input id="search" type="text" placeholder="Gushakisha: izina, telefoni, email, transaction...">
+          <div class="filters">
+            <button data-filter="ALL" class="active">All</button>
+            <button data-filter="PENDING">Pending</button>
+            <button data-filter="APPROVED">Approved</button>
+            <button data-filter="REJECTED">Rejected</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>Name</th><th>Phone</th><th>Email</th><th>Method</th><th>Amount</th>
+              <th>Transaction</th><th>Date</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="req-table"></tbody>
+          </table>
+        </div>
+        <div id="req-loading" class="empty">Yigendaje...</div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>Issue passcode for a paying customer</h2>
-      <p style="color:#888;margin-bottom:10px;font-size:13px">Fill this after you confirm payment from the Google Form. Renews the same customer if they already have one.</p>
-      <div class="input-group">
-        <input type="text" id="cname" placeholder="Full name">
-        <input type="email" id="cemail" placeholder="Email (for matching)">
-        <input type="text" id="cref" placeholder="Order/ref (optional)">
-        <input type="text" id="cphone" placeholder="Phone (optional)">
-        <select id="cdays">
-          <option value="30">30 days</option>
-          <option value="60">60 days</option>
-          <option value="90">90 days</option>
-          <option value="7">7 days</option>
-          <option value="365">1 year</option>
-        </select>
-        <button onclick="issuePasscode()">Issue → get code</button>
+    <!-- Payment Request detail modal -->
+    <div id="detail-modal" class="overlay">
+      <div class="modal" style="max-width:560px">
+        <h3>Reba ibisobanuro · Payment Request</h3>
+        <div id="detail-body"></div>
+        <div class="actions" id="detail-actions"></div>
       </div>
-      <div id="issueResult" style="margin-top:10px"></div>
     </div>
 
-    <div class="card">
-      <h2>Passcodes</h2>
-      <button class="secondary" onclick="loadPasscodes()">Refresh</button>
-      <table>
-        <thead>
-          <tr>
-            <th>Code</th>
-            <th>Type</th>
-            <th>Created</th>
-            <th>Expires</th>
-            <th>Uses</th>
-            <th>Status</th>
-            <th>Note</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="passcodes"></tbody>
-      </table>
+    <!-- Confirmation modal -->
+    <div id="confirm-modal" class="overlay">
+      <div class="modal">
+        <h3 id="confirm-title"></h3>
+        <p id="confirm-text"></p>
+        <div class="actions">
+          <button class="secondary" onclick="closeConfirm()">Kureka</button>
+          <button id="confirm-yes" onclick="runConfirm()">Kwemeza</button>
+        </div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Installs</h2>
-      <button class="secondary" onclick="loadInstalls()">Refresh</button>
-      <table>
-        <thead>
-          <tr>
-            <th>Machine ID</th>
-            <th>Platform</th>
-            <th>Arch</th>
-            <th>Registered</th>
-            <th>Last Seen</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="installs"></tbody>
-      </table>
+    <!-- Passcode result modal -->
+    <div id="code-modal" class="overlay">
+      <div class="modal">
+        <h3>Payment Approved ✓</h3>
+        <p>Passcode generated successfully. Ihereza uyu muntu.</p>
+        <div class="big-code" id="code-output"></div>
+        <p style="text-align:center"><span class="copied" id="expiry-hint"></span></p>
+        <div class="actions"><button class="secondary" onclick="closeCodeModal()">Gusiga (Close)</button></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Customers</h2>
-      <button class="secondary" onclick="loadCustomers()">Refresh</button>
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Ref</th>
-            <th>Last payment</th>
-            <th>Passcode</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="customers"></tbody>
-      </table>
+    <div id="tab-requests" class="hidden">
+      <div class="card">
+        <h2>Imirimo yose (All Requests)</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Search and manage all payment requests from the form.</p>
+        <div id="requests-body"></div>
+      </div>
+    </div>
+
+    <div id="tab-passcodes" class="hidden">
+      <div class="card">
+        <h2>Passcodes</h2>
+        <div class="stats-grid" style="margin-top:10px">
+          <div class="stat"><div class="label">Active</div><div class="value accent" id="pc-active">-</div></div>
+          <div class="stat"><div class="label">Blocked</div><div class="value danger" id="pc-blocked">-</div></div>
+        </div>
+        <div class="table-wrap" style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>Code</th><th>Type</th><th>Created</th><th>Status</th><th>Expires</th><th>Uses</th><th>Note</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="pc-table"></tbody>
+          </table>
+        </div>
+        <div id="pc-loading" class="empty">Yigendaje...</div>
+      </div>
+    </div>
+
+    <div id="tab-audit" class="hidden">
+      <div class="card">
+        <h2>Audit Log</h2>
+        <div class="table-wrap" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Timestamp</th><th>Action</th><th>Actor</th><th>Target</th></tr></thead>
+            <tbody id="audit-table"></tbody>
+          </table>
+        </div>
+        <div id="audit-loading" class="empty">Yigendaje...</div>
+      </div>
+    </div>
+
+    <div id="tab-tools" class="hidden">
+      <div class="card">
+        <h2>Generate Passcode</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Create a public (free trial) or personal passcode directly.</p>
+        <div class="input-group">
+          <select id="tool-type">
+            <option value="public">Public (3 weeks free)</option>
+            <option value="personal">Personal (paid)</option>
+          </select>
+          <input type="text" id="tool-note" placeholder="Note (optional)">
+          <button onclick="generatePasscode()">Generate</button>
+        </div>
+        <div id="tool-generate-result" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>Issue passcode for a paying customer</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Fill this after you confirm payment from the Google Form. Renews the same customer if they already have one.</p>
+        <div class="input-group">
+          <input type="text" id="tool-name" placeholder="Full name">
+          <input type="email" id="tool-email" placeholder="Email (for matching)">
+          <input type="text" id="tool-ref" placeholder="Order/ref (optional)">
+          <input type="text" id="tool-phone" placeholder="Phone (optional)">
+          <select id="tool-days">
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+            <option value="7">7 days</option>
+            <option value="365">1 year</option>
+          </select>
+          <button onclick="issuePasscode()">Issue → get code</button>
+        </div>
+        <div id="tool-issue-result" style="margin-top:10px"></div>
+      </div>
     </div>
   </div>
 
+  <div id="toast" class="toast"></div>
+
   <script>
     const API = window.location.origin
-    const TOKEN = localStorage.getItem('admin_token') || prompt('Enter admin token:')
+    const isAdminView = location.pathname.replace(/\/+$/,"") === "/admin"
 
-    if (TOKEN) localStorage.setItem('admin_token', TOKEN)
+    // Show correct view
+    document.getElementById('view-access').classList.toggle('hidden', isAdminView)
+    document.getElementById('view-admin').classList.toggle('hidden', !isAdminView)
+    if (isAdminView) initAdmin()
+    else initAccess()
 
-    function headers() {
-      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` }
-    }
-
-    function showStatus(msg, ok) {
-      const el = document.getElementById('status')
+    // ═══════════ Toast ═══════════
+    let toastTimer
+    function toast(msg, type='') {
+      const el = document.getElementById('toast')
       el.textContent = msg
-      el.className = `status ${ok ? 'success' : 'error'}`
-      el.style.display = 'block'
-      setTimeout(() => el.style.display = 'none', 3000)
+      el.className = 'toast show ' + type
+      clearTimeout(toastTimer)
+      toastTimer = setTimeout(() => el.classList.remove('show'), 3200)
     }
 
-    async function generatePasscode() {
-      const type = document.getElementById('type').value
-      const note = document.getElementById('note').value
-      try {
-        const res = await fetch(`${API}/v1/admin/passcodes/generate`, {
-          method: 'POST', headers: headers(),
-          body: JSON.stringify({ type, note: note || undefined })
-        })
-        const data = await res.json()
-        if (data.code) {
-          showStatus(`Generated: ${data.code}`, true)
-          loadPasscodes()
-        } else {
-          showStatus(data.error || 'Failed', false)
+    // ═══════════ ACCESS PAGE ═══════════
+    async function initAccess() {
+      const input = document.getElementById('access-input')
+      const btn = document.getElementById('access-btn')
+      const result = document.getElementById('access-result')
+
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit() })
+      btn.addEventListener('click', submit)
+
+      function showResult(html, type) {
+        result.innerHTML = html
+        result.className = 'result-panel show ' + type
+      }
+
+      async function submit() {
+        const code = input.value.trim().toUpperCase()
+        if (!code) { showResult('Andika Passcode yawe.', 'error'); return }
+        btn.disabled = true
+        btn.textContent = 'Bikorera...'
+        result.className = 'result-panel'
+        try {
+            const mid = localStorage.getItem('icode_machine_id') || crypto.randomUUID()
+            localStorage.setItem('icode_machine_id', mid)
+            const res = await fetch(`${API}/v1/passcode/validate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                code,
+                machine_id: mid,
+                platform: navigator.platform || 'web', arch: 'web'
+              })
+            })
+          const data = await res.json()
+          if (data.ok) {
+            localStorage.setItem('icode_passcode', code)
+            showResult(`<strong>Murakaza neza kuri iCode!</strong><br>Passcode yemejwe neza.<br><span style="font-size:13px">Ubu ushobora gukoresha iCode.</span>`, 'success')
+          } else if (data.rate_limited) {
+            showResult('Ugerageje kenshi. Gerageza nyuma y\'akanya kato.', 'info')
+          } else if (data.reason === 'blocked') {
+            showResult('Uburenganzira bwo gukoresha iCode kuri iyi Passcode bwahagaritswe.<br><span style="font-size:13px">Nyamuneka hamagara ushinzwe iCode.</span>', 'error')
+          } else if (data.reason === 'expired') {
+            showResult('Passcode yawe yararangiye.<br><span style="font-size:13px">Twandikire cyangwa ukurikize amabwiriza yo kongera kubona uburenganzira bwo gukoresha iCode.</span>', 'info')
+          } else {
+            showResult('Passcode siyo.<br><span style="font-size:13px">Reba neza ko wanditse Passcode yawe neza wongere ugerageze.</span>', 'error')
+          }
+        } catch (e) {
+          showResult('Netiike ntikora. Gerageza nyuma.', 'error')
         }
-      } catch (e) {
-        showStatus('Error: ' + e.message, false)
+        btn.disabled = false
+        btn.textContent = 'Komeza kuri iCode'
       }
     }
 
+    // ═══════════ ADMIN DASHBOARD ═══════════
+    const TOKEN = localStorage.getItem('admin_token') || prompt('Enter admin token:')
+    if (TOKEN) localStorage.setItem('admin_token', TOKEN)
+    function headers() { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` } }
+
+    let allRequests = []
+    let allPasscodes = []
+    let auditEntries = []
+
+    async function api(path, opts={}) {
+      const res = await fetch(`${API}${path}`, { headers: headers(), ...opts })
+      if (res.status === 401) { toast('Unauthorized - reba admin token', 'error'); throw new Error('unauthorized') }
+      const data = await res.json()
+      if (!res.ok && !opts.dontThrow) { toast(data.error || 'Error', 'error'); throw new Error(data.error || 'error') }
+      return data
+    }
+
+    function initAdmin() {
+      document.querySelectorAll('.admin-nav a').forEach(a => {
+        a.addEventListener('click', (e) => { e.preventDefault(); setTab(a.getAttribute('data-tab')) })
+      })
+      setTab('dashboard')
+    }
+
+    function setTab(tab) {
+      document.querySelectorAll('.admin-nav a').forEach(a => a.classList.toggle('active', a.getAttribute('data-tab') === tab))
+      ;['dashboard','requests','passcodes','tools','audit'].forEach(t => {
+        document.getElementById('tab-'+t).classList.toggle('hidden', t !== tab)
+      })
+      if (tab === 'dashboard') loadStats()
+      if (tab === 'requests') loadRequests(true)
+      if (tab === 'passcodes') loadPasscodes()
+      if (tab === 'tools') loadStats()
+      if (tab === 'audit') loadAudit()
+    }
+
+    async function loadStats() {
+      try {
+        const s = await api('/v1/admin/dashboard/stats')
+        document.getElementById('st-total').textContent = s.total
+        document.getElementById('st-pending').textContent = s.pending
+        document.getElementById('st-approved').textContent = s.approved
+        document.getElementById('st-rejected').textContent = s.rejected
+        document.getElementById('st-active').textContent = s.active_passcodes
+        document.getElementById('st-expired').textContent = s.expired_passcodes
+      } catch(e) {}
+    }
+
+    // ----- Requests (two views: embedded on dashboard + full tab) -----
+    let filter = 'ALL'
+    document.querySelectorAll('.filters button').forEach(b => {
+      b.addEventListener('click', () => {
+        filter = b.getAttribute('data-filter')
+        document.querySelectorAll('.filters button').forEach(x => x.classList.remove('active'))
+        b.classList.add('active')
+        renderRequestsTable()
+      })
+    })
+    document.getElementById('search').addEventListener('input', renderRequestsTable)
+
+    async function loadRequests(render) {
+      try {
+        const data = await api('/v1/admin/payment-requests')
+        allRequests = data.requests || []
+        if (render) { renderRequestsTable(); loadStats() }
+      } catch(e) {}
+    }
+
+    function statusBadge(s) { return `<span class="badge ${s.toLowerCase()}">${s}</span>` }
+
+    function methodLabel(m) {
+      if (!m) return '-'
+      const map = { MTN_MOMO: 'MTN MoMo', BK_BANK: 'BK Bank', momo: 'MoMo', bank: 'Bank' }
+      return map[m] || m
+    }
+
+    function filteredRequests() {
+      const q = document.getElementById('search').value.trim().toLowerCase()
+      return allRequests.filter(r => {
+        if (filter !== 'ALL' && r.status !== filter) return false
+        if (!q) return true
+        return [r.full_name, r.phone_number, r.email, r.transaction_reference]
+          .filter(Boolean).some(v => v.toLowerCase().includes(q))
+      })
+    }
+
+    function renderRequestsTable() {
+      const list = filteredRequests()
+      const tbody = document.getElementById('req-table')
+      const loading = document.getElementById('req-loading')
+      if (!list.length) {
+        tbody.innerHTML = ''
+        loading.textContent = 'Nta busabe. (No requests yet)'
+        loading.style.display = 'block'
+        return
+      }
+      loading.style.display = 'none'
+      tbody.innerHTML = list.map(r => `
+        <tr>
+          <td>${escapeHtml(r.full_name)}${r.is_duplicate ? ' <span class="badge rejected" title="Possible duplicate">dup</span>' : ''}</td>
+          <td>${escapeHtml(r.phone_number || '-')}</td>
+          <td>${escapeHtml(r.email || '-')}</td>
+          <td>${methodLabel(r.payment_method)}</td>
+          <td>${r.payment_amount ?? '-'}</td>
+          <td><span class="code">${escapeHtml(r.transaction_reference || '-')}</span></td>
+          <td>${r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td class="actions">
+            <button class="secondary" onclick="openDetail('${r.id}')">View</button>
+            ${r.status === 'PENDING' ? `<button onclick="promptApprove('${r.id}')">Approve</button><button class="danger" onclick="promptReject('${r.id}')">Reject</button>` : ''}
+          </td>
+        </tr>`).join('')
+      if (document.getElementById('requests-body')) renderRequestsFull(list)
+    }
+
+    function renderRequestsFull(list) {
+      document.getElementById('requests-body').innerHTML = `
+        <div class="table-wrap" style="overflow-x:auto">
+          <table><thead><tr>
+            <th>Name</th><th>Phone</th><th>Email</th><th>Method</th><th>Amount</th>
+            <th>Transaction</th><th>Date</th><th>Status</th><th>Actions</th>
+          </tr></thead><tbody>${list.map(r => `
+            <tr>
+              <td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.phone_number || '-')}</td><td>${escapeHtml(r.email || '-')}</td>
+              <td>${methodLabel(r.payment_method)}</td><td>${r.payment_amount ?? '-'}</td>
+              <td><span class="code">${escapeHtml(r.transaction_reference || '-')}</span></td>
+              <td>${r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</td>
+              <td>${statusBadge(r.status)}</td>
+              <td class="actions"><button class="secondary" onclick="openDetail('${r.id}')">View</button>
+                ${r.status === 'PENDING' ? `<button onclick="promptApprove('${r.id}')">Approve</button><button class="danger" onclick="promptReject('${r.id}')">Reject</button>` : ''}
+              </td>
+            </tr>`).join('')}</tbody></table>
+        </div>`
+    }
+
+    // ----- Detail modal -----
+    function openDetail(id) {
+      const r = allRequests.find(x => x.id === id)
+      if (!r) return
+      const modal = document.getElementById('detail-modal')
+      document.getElementById('detail-body').innerHTML = `
+        <h4 style="margin:12px 0 6px;color:var(--accent)">Applicant Information</h4>
+        <p style="color:var(--muted)">Full Name: <strong style="color:#fff">${escapeHtml(r.full_name)}</strong></p>
+        <p style="color:var(--muted)">Email: <strong style="color:#fff">${escapeHtml(r.email || '-')}</strong></p>
+        <p style="color:var(--muted)">Phone: <strong style="color:#fff">${escapeHtml(r.phone_number || '-')}</strong></p>
+        <h4 style="margin:12px 0 6px;color:var(--accent)">Payment Information</h4>
+        <p style="color:var(--muted)">Method: <strong style="color:#fff">${methodLabel(r.payment_method)}</strong></p>
+        <p style="color:var(--muted)">Amount: <strong style="color:#fff">${r.payment_amount ?? '-'} RWF</strong></p>
+        <p style="color:var(--muted)">Transaction Reference: <strong class="code" style="color:#fff">${escapeHtml(r.transaction_reference || '-')}</strong></p>
+        <p style="color:var(--muted)">Payment Date: <strong style="color:#fff">${escapeHtml(r.payment_date || '-')}</strong></p>
+        <p style="color:var(--muted)">Payment Time: <strong style="color:#fff">${escapeHtml(r.payment_time || '-')}</strong></p>
+        ${r.payment_proof ? `<h4 style="margin:12px 0 6px;color:var(--accent)">Payment Proof</h4><p style="color:var(--muted)">${escapeHtml(r.payment_proof)}</p>
+          <p><button class="secondary" onclick="window.open('${escapeHtml(r.payment_proof)}','_blank')">Reba proof (View)</button></p>` : ''}
+        <h4 style="margin:12px 0 6px;color:var(--accent)">Submission</h4>
+        <p style="color:var(--muted)">Status: ${statusBadge(r.status)}</p>
+        ${r.is_duplicate ? '<p style="color:var(--warn);margin-top:8px">⚠ Possible Duplicate Payment. Iyi transaction reference yahise yoherezwa.</p>' : ''}
+        ${r.admin_note ? `<p style="color:var(--muted)">Admin note: <strong style="color:#fff">${escapeHtml(r.admin_note)}</strong></p>` : ''}
+      `
+      document.getElementById('detail-actions').innerHTML = r.status === 'PENDING' ? `
+        <button onclick="closeDetail();promptApprove('${r.id}')">Kwemeza ubwishyu</button>
+        <button class="danger" onclick="closeDetail();promptReject('${r.id}')">Kwanga</button>
+        <button class="secondary" onclick="closeDetail()">Subira inyuma</button>
+      ` : `<button class="secondary" onclick="closeDetail()">Subira inyuma</button>`
+      modal.classList.add('show')
+    }
+    function closeDetail() { document.getElementById('detail-modal').classList.remove('show') }
+    document.getElementById('detail-modal').addEventListener('click', (e) => { if (e.target.id === 'detail-modal') closeDetail() })
+
+    // ----- Confirmation -----
+    let confirmAction = null
+    function promptApprove(id) {
+      document.getElementById('confirm-title').textContent = 'Emeza ko wishyuwe?'
+      document.getElementById('confirm-text').textContent = 'Uyu ukoresha yatanze ubwishyu bwa 1,000 RWF.'
+      document.getElementById('confirm-yes').textContent = 'Kwemeza'
+      document.getElementById('confirm-yes').className = ''
+      confirmAction = () => runApprove(id)
+      document.getElementById('confirm-modal').classList.add('show')
+    }
+    function promptReject(id) {
+      document.getElementById('confirm-title').textContent = 'Kwanga ubu busabe?'
+      document.getElementById('confirm-text').textContent = 'Uribwa ko ubwishyu budahuye? Ibi ntibizahita bitandika passcode.'
+      document.getElementById('confirm-yes').textContent = 'Kwanga'
+      document.getElementById('confirm-yes').className = 'danger'
+      confirmAction = () => runReject(id)
+      document.getElementById('confirm-modal').classList.add('show')
+    }
+    function closeConfirm() { document.getElementById('confirm-modal').classList.remove('show'); confirmAction = null }
+    async function runConfirm() {
+      if (!confirmAction) return
+      const fn = confirmAction
+      closeConfirm()
+      await fn()
+    }
+
+    // ----- Approve with progress -----
+    async function runApprove(id) {
+      toast('Verifying payment...', '')
+      try {
+        const data = await api(`/v1/admin/payment-requests/${id}/approve`, { method: 'POST', body: JSON.stringify({ verifiedBy: TOKEN }) })
+        toast('Payment verified ✓', 'success')
+        await loadRequests(true)
+        if (data.passcode) {
+          document.getElementById('code-output').textContent = data.passcode
+          document.getElementById('expiry-hint').textContent = 'Expires ' + new Date(data.expiresAt).toLocaleDateString()
+          document.getElementById('code-modal').classList.add('show')
+        }
+      } catch(e) {}
+    }
+    function closeCodeModal() { document.getElementById('code-modal').classList.remove('show'); document.getElementById('code-modal').querySelector('.big-code').textContent=''; }
+    document.getElementById('code-modal').addEventListener('click', (e) => { if (e.target.id === 'code-modal') closeCodeModal() })
+
+    async function runReject(id) {
+      try {
+        await api(`/v1/admin/payment-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ adminNote: 'Rejected by admin' }) })
+        toast('Ubusabe bwanzwe (rejected)', 'warn')
+        await loadRequests(true)
+      } catch(e) {}
+    }
+
+    // ----- Passcodes -----
     async function loadPasscodes() {
       try {
-        const res = await fetch(`${API}/v1/admin/passcodes`, { headers: headers() })
-        const data = await res.json()
-        const tbody = document.getElementById('passcodes')
-        tbody.innerHTML = (data.passcodes || []).map(p => `
-          <tr>
+        const data = await api('/v1/admin/passcodes')
+        allPasscodes = data.passcodes || []
+        const tbody = document.getElementById('pc-table')
+        const loading = document.getElementById('pc-loading')
+        document.getElementById('pc-active').textContent = allPasscodes.filter(p => !p.blocked && new Date(p.expires_at) > new Date()).length
+        document.getElementById('pc-blocked').textContent = allPasscodes.filter(p => p.blocked).length
+        if (!allPasscodes.length) {
+          tbody.innerHTML = ''; loading.style.display = 'block'; loading.textContent = 'Nta passcode ihari (No passcodes).'; return
+        }
+        loading.style.display = 'none'
+        const now = new Date()
+        tbody.innerHTML = allPasscodes.map(p => {
+          const expired = !p.blocked && new Date(p.expires_at) < now
+          const status = p.blocked ? 'revoked' : expired ? 'expired' : 'active'
+          return `<tr>
             <td><span class="code">${p.code}</span></td>
-            <td><span class="badge ${p.type}">${p.type}</span></td>
+            <td><span class="badge ${p.type==='personal'?'approved':'active'}">${p.type}</span></td>
             <td>${new Date(p.created_at).toLocaleDateString()}</td>
+            <td><span class="badge ${status}">${p.blocked?'Revoked':expired?'Expired':'Active'}</span></td>
             <td>${new Date(p.expires_at).toLocaleDateString()}</td>
             <td>${p.current_uses}${p.max_uses ? '/' + p.max_uses : ''}</td>
-            <td><span class="badge ${p.blocked ? 'blocked' : 'active'}">${p.blocked ? 'Blocked' : 'Active'}</span></td>
-            <td>${p.note || '-'}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.note || '-')}</td>
             <td class="actions">
-              <button class="secondary" onclick="togglePasscode('${p.id}', ${!p.blocked})">${p.blocked ? 'Unblock' : 'Block'}</button>
-              <button class="danger" onclick="deletePasscode('${p.id}')">Delete</button>
+              ${!p.blocked ? `<button class="danger" onclick="promptRevoke('${p.id}')">Revoke</button>` : `<button class="secondary" onclick="reactivatePass('${p.id}')">Reactivate</button>`}
             </td>
-          </tr>
-        `).join('')
-      } catch (e) {
-        showStatus('Error loading passcodes: ' + e.message, false)
-      }
+          </tr>`
+        }).join('')
+      } catch(e) {}
     }
 
-    async function loadInstalls() {
+    function promptRevoke(id) {
+      document.getElementById('confirm-title').textContent = 'Hagarika ubu burenganzira?'
+      document.getElementById('confirm-text').textContent = 'Passcode irahagarikwa. Ukoresha ntazongera gukoresha iCode no kuri iyi passcode.'
+      document.getElementById('confirm-yes').textContent = 'Hagarika'
+      document.getElementById('confirm-yes').className = 'danger'
+      confirmAction = async () => {
+        try {
+          await api(`/v1/admin/passcodes/${id}/revoke`, { method: 'POST' })
+          toast('Passcode yahagaritswe (revoked)', 'warn'); loadPasscodes()
+        } catch(e) {}
+      }
+      document.getElementById('confirm-modal').classList.add('show')
+    }
+    async function reactivatePass(id) {
       try {
-        const res = await fetch(`${API}/v1/admin/installs`, { headers: headers() })
-        const data = await res.json()
-        const tbody = document.getElementById('installs')
-        tbody.innerHTML = (data.installs || []).map(i => `
-          <tr>
-            <td><span class="code">${i.machine_id.substring(0, 8)}...</span></td>
-            <td>${i.platform}</td>
-            <td>${i.arch}</td>
-            <td>${new Date(i.registered_at).toLocaleDateString()}</td>
-            <td>${new Date(i.last_seen_at).toLocaleDateString()}</td>
-            <td><span class="badge ${i.blocked ? 'blocked' : 'active'}">${i.blocked ? 'Blocked' : 'Active'}</span></td>
-            <td class="actions">
-              <button class="secondary" onclick="toggleInstall('${i.id}', ${!i.blocked})">${i.blocked ? 'Unblock' : 'Block'}</button>
-              <button class="danger" onclick="deleteInstall('${i.id}')">Delete</button>
-            </td>
-          </tr>
-        `).join('')
-      } catch (e) {
-        showStatus('Error loading installs: ' + e.message, false)
-      }
+        await api(`/v1/admin/passcodes/${id}/reactivate`, { method: 'POST' })
+        toast('Passcode yongeye gukora (reactivated)', 'success'); loadPasscodes()
+      } catch(e) {}
     }
 
-    async function togglePasscode(id, block) {
-      await fetch(`${API}/v1/admin/passcodes/${id}`, {
-        method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ blocked: block })
-      })
-      loadPasscodes()
+    // ----- Audit -----
+    async function loadAudit() {
+      try {
+        const data = await api('/v1/admin/audit-log')
+        auditEntries = data.entries || []
+        const tbody = document.getElementById('audit-table')
+        const loading = document.getElementById('audit-loading')
+        if (!auditEntries.length) { tbody.innerHTML = ''; loading.style.display='block'; loading.textContent='Nta ibyabaye (No log entries).'; return }
+        loading.style.display = 'none'
+        tbody.innerHTML = auditEntries.map(e => `
+          <tr><td>${new Date(e.timestamp).toLocaleString()}</td>
+          <td><span class="code">${escapeHtml(e.action)}</span></td>
+          <td>${escapeHtml(e.actor_id || '-')}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(e.target_id || '-')}</td></tr>`).join('')
+      } catch(e) {}
     }
 
-    async function deletePasscode(id) {
-      if (!confirm('Delete this passcode?')) return
-      await fetch(`${API}/v1/admin/passcodes/${id}`, {
-        method: 'DELETE', headers: headers()
-      })
-      loadPasscodes()
+    // ----- Helpers -----
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
     }
 
-    async function toggleInstall(id, block) {
-      await fetch(`${API}/v1/admin/installs/${id}`, {
-        method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ blocked: block })
-      })
-      loadInstalls()
-    }
-
-    async function deleteInstall(id) {
-      if (!confirm('Delete this install?')) return
-      await fetch(`${API}/v1/admin/installs/${id}`, {
-        method: 'DELETE', headers: headers()
-      })
-      loadInstalls()
+    // ----- Tools (Generate / Issue) -----
+    async function generatePasscode() {
+      const type = document.getElementById('tool-type').value
+      const note = document.getElementById('tool-note').value
+      const el = document.getElementById('tool-generate-result')
+      try {
+        const data = await api('/v1/admin/passcodes/generate', { method: 'POST', body: JSON.stringify({ type, note: note || undefined }) })
+        if (data.code) {
+          el.innerHTML = `<div class="status success">Generated: <span class="code">${data.code}</span></div>`
+          loadPasscodes()
+        }
+      } catch(e) {}
     }
 
     async function issuePasscode() {
       const body = {
-        name: document.getElementById('cname').value || undefined,
-        email: document.getElementById('cemail').value || undefined,
-        reference: document.getElementById('cref').value || undefined,
-        phone: document.getElementById('cphone').value || undefined,
-        days: Number(document.getElementById('cdays').value)
+        name: document.getElementById('tool-name').value || undefined,
+        email: document.getElementById('tool-email').value || undefined,
+        reference: document.getElementById('tool-ref').value || undefined,
+        phone: document.getElementById('tool-phone').value || undefined,
+        days: Number(document.getElementById('tool-days').value)
       }
+      const el = document.getElementById('tool-issue-result')
       if (!body.email && !body.reference) {
-        showStatus('Provide at least an email or reference', false)
+        el.innerHTML = '<div class="status error">Provide at least an email or reference</div>'
         return
       }
       try {
-        const res = await fetch(`${API}/v1/admin/passcodes/issue`, {
-          method: 'POST', headers: headers(), body: JSON.stringify(body)
-        })
+        const res = await fetch(`${API}/v1/admin/passcodes/issue`, { method: 'POST', headers: headers(), body: JSON.stringify(body) })
         const data = await res.json()
-        const el = document.getElementById('issueResult')
         if (data.ok) {
-          el.innerHTML = `<div class="status success" style="display:block">
-            ${data.renewed ? '🔄 Renewed' : '✅ New passcode'} for ${data.customer.name || 'customer'}<br>
+          el.innerHTML = `<div class="status success">${data.renewed ? '🔄 Renewed' : '✅ New passcode'} for ${data.customer.name || 'customer'}<br>
             <strong style="font-size:20px;letter-spacing:2px">${data.passcode.code}</strong><br>
-            <span style="font-size:12px">Expires ${new Date(data.passcode.expires_at).toLocaleString()}</span>
-          </div>`
-          loadPasscodes(); loadCustomers()
+            <span style="font-size:12px">Expires ${new Date(data.passcode.expires_at).toLocaleString()}</span></div>`
+          loadPasscodes()
         } else {
-          el.innerHTML = `<div class="status error" style="display:block">${data.error || 'Failed'}</div>`
+          el.innerHTML = `<div class="status error">${data.error || 'Failed'}</div>`
         }
-      } catch (e) {
-        showStatus('Error: ' + e.message, false)
+      } catch(e) {
+        el.innerHTML = `<div class="status error">Error: ${e.message}</div>`
       }
     }
-
-    async function loadCustomers() {
-      try {
-        const res = await fetch(`${API}/v1/admin/customers`, { headers: headers() })
-        const data = await res.json()
-        const tbody = document.getElementById('customers')
-        tbody.innerHTML = (data.customers || []).map(c => `
-          <tr>
-            <td>${c.name || '-'}</td>
-            <td>${c.email || '-'}</td>
-            <td>${c.reference || '-'}</td>
-            <td>${c.last_payment_at ? new Date(c.last_payment_at).toLocaleDateString() : '-'}</td>
-            <td>${c.passcode_id ? '<span class="badge active">linked</span>' : '<span class="badge blocked">none</span>'}</td>
-            <td><button class="danger" onclick="deleteCustomer('${c.id}')">Delete</button></td>
-          </tr>
-        `).join('')
-      } catch (e) {}
-    }
-
-    async function deleteCustomer(id) {
-      if (!confirm('Delete this customer record?')) return
-      await fetch(`${API}/v1/admin/customers/${id}`, {
-        method: 'DELETE', headers: headers()
-      })
-      loadCustomers()
-    }
-
-    loadPasscodes()
-    loadInstalls()
-    loadCustomers()
   </script>
 </body>
 </html>

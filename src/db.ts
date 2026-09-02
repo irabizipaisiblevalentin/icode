@@ -5,6 +5,18 @@ import { join } from "path"
 
 const DB_PATH = process.env.DB_PATH ?? (process.env.DATA_DIR ? join(process.env.DATA_DIR, "icode-control.db") : "./icode-control.db")
 
+export const ACCESS_DURATION_DAYS = parseInt(process.env.ICODE_ACCESS_DURATION_DAYS ?? "30")
+export const PAYMENT_AMOUNT_RWF = 1000
+
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET
+export function isValidWebhook(request: Request): boolean {
+  if (!WEBHOOK_SECRET) return false
+  const header = request.headers.get("x-webhook-token")
+  if (!header) return false
+  if (header !== WEBHOOK_SECRET) return false
+  return true
+}
+
 let _db: Database | null = null
 
 function db(): Database {
@@ -32,7 +44,8 @@ function init(db: Database) {
       max_uses INTEGER,
       current_uses INTEGER NOT NULL DEFAULT 0,
       blocked INTEGER NOT NULL DEFAULT 0,
-      note TEXT
+      note TEXT,
+      payment_request_id TEXT
     )
   `)
   db.run(`
@@ -76,6 +89,47 @@ function init(db: Database) {
   `)
   db.run(`CREATE INDEX IF NOT EXISTS idx_passcodes_code ON passcodes(code)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_installs_machine ON installs(machine_id)`)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS payment_requests (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      email TEXT,
+      phone_number TEXT,
+      payment_method TEXT NOT NULL,
+      transaction_reference TEXT NOT NULL,
+      payment_amount REAL NOT NULL,
+      payment_date TEXT,
+      payment_time TEXT,
+      payment_proof TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','APPROVED','REJECTED')),
+      admin_note TEXT,
+      is_duplicate INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      verified_at TEXT,
+      verified_by TEXT
+    )
+  `)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id TEXT PRIMARY KEY,
+      action TEXT NOT NULL,
+      actor_id TEXT,
+      target_id TEXT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      metadata TEXT
+    )
+  `)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_payment_requests_transaction ON payment_requests(transaction_reference)`)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status)`)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_passcodes_payment ON passcodes(payment_request_id)`)
+
+  // Migration: add payment_request_id column to existing passcodes tables
+  const cols = db.query(`PRAGMA table_info(passcodes)`).all() as { name: string }[]
+  if (!cols.some((c) => c.name === "payment_request_id")) {
+    db.run(`ALTER TABLE passcodes ADD COLUMN payment_request_id TEXT`)
+  }
 }
 
 // ─── Passcodes ────────────────────────────────────────────────────────
@@ -90,6 +144,7 @@ export interface PasscodeRow {
   current_uses: number
   blocked: number
   note: string | null
+  payment_request_id: string | null
 }
 
 export function createPasscode(opts: {
@@ -98,13 +153,14 @@ export function createPasscode(opts: {
   max_uses?: number | null
   code?: string
   note?: string
+  payment_request_id?: string
 }): PasscodeRow {
   const d = db()
   const id = randomUUID()
   const code = opts.code ?? randomCode()
   d.run(
-    `INSERT INTO passcodes (id, code, type, expires_at, max_uses, note) VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, code, opts.type, opts.expires_at, opts.max_uses ?? null, opts.note ?? null],
+    `INSERT INTO passcodes (id, code, type, expires_at, max_uses, note, payment_request_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, code, opts.type, opts.expires_at, opts.max_uses ?? null, opts.note ?? null, opts.payment_request_id ?? null],
   )
   return getPasscode(id)!
 }
@@ -294,9 +350,157 @@ export function getUsage(installId: string, periodKey: string): number {
   return row?.seconds_used ?? 0
 }
 
+// ─── Payment Requests ────────────────────────────────────────────────
+
+export type PaymentStatus = "PENDING" | "APPROVED" | "REJECTED"
+
+export interface PaymentRequestRow {
+  id: string
+  full_name: string
+  email: string | null
+  phone_number: string | null
+  payment_method: string | null
+  transaction_reference: string | null
+  payment_amount: number | null
+  payment_date: string | null
+  payment_time: string | null
+  payment_proof: string | null
+  status: PaymentStatus
+  admin_note: string | null
+  is_duplicate: number
+  created_at: string
+  updated_at: string
+  verified_at: string | null
+  verified_by: string | null
+}
+
+export interface PaymentRequestInput {
+  fullName: string
+  email?: string
+  phoneNumber?: string
+  paymentMethod?: string
+  transactionReference?: string
+  paymentAmount?: number
+  paymentDate?: string
+  paymentTime?: string
+  paymentProof?: string
+}
+
+export function findDuplicatePayment(
+  reference?: string,
+  method?: string,
+  amount?: number,
+  email?: string,
+): PaymentRequestRow | null {
+  if (!reference) return null
+  const d = db()
+  return (
+    d
+      .query<PaymentRequestRow, [string]>(`SELECT * FROM payment_requests WHERE transaction_reference = ? ORDER BY created_at DESC LIMIT 1`)
+      .get(reference) ?? null
+  )
+}
+
+export function createPaymentRequest(input: PaymentRequestInput): { request: PaymentRequestRow; isDuplicate: boolean } {
+  const d = db()
+  const duplicate = findDuplicatePayment(input.transactionReference, input.paymentMethod, input.paymentAmount, input.email)
+  const id = randomUUID()
+  const ref = input.transactionReference ?? null
+  d.run(
+    `INSERT INTO payment_requests (id, full_name, email, phone_number, payment_method, transaction_reference, payment_amount, payment_date, payment_time, payment_proof, is_duplicate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      input.fullName,
+      input.email ?? null,
+      input.phoneNumber ?? null,
+      input.paymentMethod ?? null,
+      ref,
+      input.paymentAmount ?? null,
+      input.paymentDate ?? null,
+      input.paymentTime ?? null,
+      input.paymentProof ?? null,
+      duplicate ? 1 : 0,
+    ],
+  )
+  if (duplicate) {
+    writeAudit("DUPLICATE_PAYMENT", "system", id, { reference: input.transactionReference })
+  }
+  return { request: getPaymentRequest(id)!, isDuplicate: !!duplicate }
+}
+
+export function getPaymentRequest(id: string): PaymentRequestRow | null {
+  return db().query<PaymentRequestRow, [string]>(`SELECT * FROM payment_requests WHERE id = ?`).get(id) ?? null
+}
+
+export function listPaymentRequests(): PaymentRequestRow[] {
+  return db().query<PaymentRequestRow, []>(`SELECT * FROM payment_requests ORDER BY created_at DESC`).all()
+}
+
+export function getPaymentRequestByPasscode(passcodeId: string): PaymentRequestRow | null {
+  return db().query<PaymentRequestRow, [string]>(`SELECT * FROM payment_requests WHERE id = (SELECT payment_request_id FROM passcodes WHERE id = ?)`).get(passcodeId) ?? null
+}
+
+export function updatePaymentRequestStatus(
+  id: string,
+  status: PaymentStatus,
+  options?: { adminNote?: string; verifiedBy?: string },
+) {
+  db().run(
+    `UPDATE payment_requests SET status = ?, admin_note = ?, verified_at = ?, verified_by = ?, updated_at = datetime('now') WHERE id = ?`,
+    [
+      status,
+      options?.adminNote ?? null,
+      status === "APPROVED" || status === "REJECTED" ? new Date().toISOString() : null,
+      options?.verifiedBy ?? null,
+      id,
+    ],
+  )
+  return getPaymentRequest(id)
+}
+
+export function getPaymentStats() {
+  const d = db()
+  const count = (where: string) => {
+    const row = d.query<{ c: number }, []>(`SELECT COUNT(*) AS c FROM payment_requests WHERE ${where}`).get()
+    return row?.c ?? 0
+  }
+  const now = new Date().toISOString()
+  return {
+    total: count("1 = 1"),
+    pending: count("status = 'PENDING'"),
+    approved: count("status = 'APPROVED'"),
+    rejected: count("status = 'REJECTED'"),
+    active_passcodes: d.query<{ c: number }, [string]>(`SELECT COUNT(*) AS c FROM passcodes WHERE blocked = 0 AND expires_at > ?`).get(now)?.c ?? 0,
+    expired_passcodes: d.query<{ c: number }, [string]>(`SELECT COUNT(*) AS c FROM passcodes WHERE blocked = 0 AND expires_at <= ?`).get(now)?.c ?? 0,
+  }
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────
+
+export interface AuditLogRow {
+  id: string
+  action: string
+  actor_id: string | null
+  target_id: string | null
+  timestamp: string
+  metadata: string | null
+}
+
+export function writeAudit(action: string, actorId: string, targetId?: string, metadata?: unknown) {
+  db().run(
+    `INSERT INTO audit_log (id, action, actor_id, target_id, metadata) VALUES (?, ?, ?, ?, ?)`,
+    [randomUUID(), action, actorId, targetId ?? null, metadata ? JSON.stringify(metadata) : null],
+  )
+}
+
+export function listAuditLog(): AuditLogRow[] {
+  return db().query<AuditLogRow, []>(`SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 500`).all()
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-function randomCode(): string {
+export function randomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
   let code = ""
   for (let i = 0; i < 12; i++) {
@@ -304,4 +508,14 @@ function randomCode(): string {
     if (i === 3 || i === 7) code += "-"
   }
   return code
+}
+
+export function randomAccessCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  const block = () => {
+    let s = ""
+    for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)]
+    return s
+  }
+  return `ICODE-${block()}-${block()}`
 }

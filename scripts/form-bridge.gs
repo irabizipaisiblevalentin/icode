@@ -1,0 +1,98 @@
+/**
+ * iCode — Google Forms → iCode Backend Bridge
+ * ===========================================
+ *
+ * PURPOSE
+ * Google Forms do not send webhooks natively. The standard solution is to
+ * link the form to a Google Sheet (Responses tab → Link to Sheets) and run
+ * this Apps Script on every new form submission.
+ *
+ * SETUP
+ * 1. Open the Google Sheet that collects your form responses.
+ * 2. Menu: Extensions → Apps Script.
+ * 3. Delete the placeholder code and paste the contents of this file.
+ * 4. Replace the two constants below with your real values:
+ *      WEBHOOK_URL   — your icode-control server base URL, e.g. https://your-host
+ *      WEBHOOK_TOKEN — the value of the WEBHOOK_SECRET env var on the server.
+ * 5. Save. Then choose the `onFormSubmit` function and run it once to
+ *    authorize the script (it will ask for permissions).
+ * 6. Menu: Triggers → Add Trigger →
+ *      - function:   onFormSubmit
+ *      - event type: On form submit
+ *    Save.
+ *
+ * COLUMN MAPPING
+ * The script reads each question by name from the e.values array. Edit the
+ * `mapColumns()` function below to match the EXACT column headers in your
+ * form (they appear in the same order as the questions).
+ */
+// ⚠️ EDIT THESE:
+var WEBHOOK_URL = "https://REPLACE-WITH-YOUR-SERVER/v1/webhook/form"
+var WEBHOOK_TOKEN = "REPLACE-WITH-YOUR-WEBHOOK-SECRET"
+
+/**
+ * Triggered automatically when the form is submitted.
+ * @param {Object} e The form-submit event object.
+ */
+function onFormSubmit(e) {
+  if (!e || !e.values) return
+
+  // e.values[0] is the timestamp; questions follow in column order.
+  var values = e.values.slice(1)
+  var payload = mapColumns(values)
+
+  if (!payload.fullName) {
+    console.log("Skipping submission: no full name mapped.")
+    return
+  }
+
+  var options = {
+    method: "post",
+    contentType: "application/json",
+    headers: { "x-webhook-token": WEBHOOK_TOKEN },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  }
+
+  var response = UrlFetchApp.fetch(WEBHOOK_URL, options)
+  console.log("Webhook status: " + response.getResponseCode() + " body: " + response.getContentText())
+}
+
+/**
+ * Map raw form values (after the leading timestamp) to the iCode payment
+ * request fields. Adjust indices to match your form's question order.
+ *
+ * Default assumed column order (0-indexed after timestamp):
+ *   0: fullName
+ *   1: phoneNumber
+ *   2: email
+ *   3: paymentMethod
+ *   4: transactionReference
+ *   5: paymentDate
+ *   6: paymentTime
+ *   7: paymentProof (URL)
+ */
+function mapColumns(values) {
+  return {
+    fullName: values[0] || "",
+    phoneNumber: values[1] || "",
+    email: values[2] || "",
+    paymentMethod: normalizeMethod(values[3] || ""),
+    transactionReference: values[4] || "",
+    paymentDate: values[5] || "",
+    paymentTime: values[6] || "",
+    paymentProof: values[7] || "",
+    // Amount is enforced server-side as 1000 RWF, so it is not collected here.
+    paymentAmount: 1000,
+  }
+}
+
+/**
+ * Map the free-text payment method chosen in the form to the expected value.
+ */
+function normalizeMethod(raw) {
+  var m = (raw || "").toLowerCase()
+  if (m.indexOf("momo") !== -1 || m.indexOf("mtn") !== -1) return "MTN_MOMO"
+  if (m.indexOf("bank") !== -1 || m.indexOf("bk") !== -1) return "BK_BANK"
+  return (raw || "other").toUpperCase()
+}

@@ -7,6 +7,7 @@ import {
   getInstallByMachine,
   addUsage,
 } from "../db"
+import { hitRateLimit } from "../rate-limit"
 
 // ─── Client API ───────────────────────────────────────────────────────
 
@@ -27,9 +28,21 @@ export interface ValidateResponse {
   type?: "public" | "personal"
   remaining_seconds?: number
   quota_seconds?: number
+  rate_limited?: boolean
+  retry_after_seconds?: number
 }
 
 export function validate(req: ValidateRequest): ValidateResponse {
+  const limiter = hitRateLimit(`validate:${req.machine_id}`, 10, 60_000)
+  if (!limiter.allowed) {
+    return {
+      ok: false,
+      reason: "rate_limited",
+      rate_limited: true,
+      retry_after_seconds: limiter.retryAfterSeconds,
+      message: "Ugerageje kenshi. Gerageza nyuma y'akanya kato.",
+    }
+  }
   const passcode = findPasscodeByCode(req.code)
   if (!passcode) {
     return { ok: false, reason: "not_found", message: "Passcode ntabwo iboneka." }
