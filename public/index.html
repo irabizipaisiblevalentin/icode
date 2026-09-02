@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iCode Admin Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { color: #00ff88; margin-bottom: 20px; font-size: 24px; }
+    h2 { color: #888; margin: 30px 0 15px; font-size: 18px; }
+    .card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .input-group { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+    input, select { background: #0d0d0d; border: 1px solid #444; color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 14px; }
+    input:focus, select:focus { outline: none; border-color: #00ff88; }
+    button { background: #00ff88; color: #000; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; }
+    button:hover { background: #00cc6a; }
+    button.danger { background: #ff4444; color: #fff; }
+    button.danger:hover { background: #cc0000; }
+    button.secondary { background: #333; color: #fff; }
+    button.secondary:hover { background: #444; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; font-size: 13px; }
+    th { color: #888; font-weight: 600; }
+    tr:hover { background: #1a1a1a; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .badge.public { background: #00ff88; color: #000; }
+    .badge.personal { background: #0088ff; color: #fff; }
+    .badge.blocked { background: #ff4444; color: #fff; }
+    .badge.active { background: #00ff88; color: #000; }
+    .code { font-family: monospace; background: #0d0d0d; padding: 2px 6px; border-radius: 4px; }
+    .status { margin-top: 10px; padding: 10px; border-radius: 6px; }
+    .status.success { background: #003300; border: 1px solid #00ff88; color: #00ff88; }
+    .status.error { background: #330000; border: 1px solid #ff4444; color: #ff4444; }
+    #status { display: none; }
+    .actions { display: flex; gap: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛡 iCode Admin Dashboard</h1>
+
+    <div id="status" class="status"></div>
+
+    <div class="card">
+      <h2>Generate Passcode</h2>
+      <div class="input-group">
+        <select id="type">
+          <option value="public">Public (3 weeks free)</option>
+          <option value="personal">Personal (paid)</option>
+        </select>
+        <input type="text" id="note" placeholder="Note (optional)">
+        <button onclick="generatePasscode()">Generate</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Issue passcode for a paying customer</h2>
+      <p style="color:#888;margin-bottom:10px;font-size:13px">Fill this after you confirm payment from the Google Form. Renews the same customer if they already have one.</p>
+      <div class="input-group">
+        <input type="text" id="cname" placeholder="Full name">
+        <input type="email" id="cemail" placeholder="Email (for matching)">
+        <input type="text" id="cref" placeholder="Order/ref (optional)">
+        <input type="text" id="cphone" placeholder="Phone (optional)">
+        <select id="cdays">
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="90">90 days</option>
+          <option value="7">7 days</option>
+          <option value="365">1 year</option>
+        </select>
+        <button onclick="issuePasscode()">Issue → get code</button>
+      </div>
+      <div id="issueResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Passcodes</h2>
+      <button class="secondary" onclick="loadPasscodes()">Refresh</button>
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Type</th>
+            <th>Created</th>
+            <th>Expires</th>
+            <th>Uses</th>
+            <th>Status</th>
+            <th>Note</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="passcodes"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Installs</h2>
+      <button class="secondary" onclick="loadInstalls()">Refresh</button>
+      <table>
+        <thead>
+          <tr>
+            <th>Machine ID</th>
+            <th>Platform</th>
+            <th>Arch</th>
+            <th>Registered</th>
+            <th>Last Seen</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="installs"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Customers</h2>
+      <button class="secondary" onclick="loadCustomers()">Refresh</button>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Ref</th>
+            <th>Last payment</th>
+            <th>Passcode</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="customers"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const API = window.location.origin
+    const TOKEN = localStorage.getItem('admin_token') || prompt('Enter admin token:')
+
+    if (TOKEN) localStorage.setItem('admin_token', TOKEN)
+
+    function headers() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` }
+    }
+
+    function showStatus(msg, ok) {
+      const el = document.getElementById('status')
+      el.textContent = msg
+      el.className = `status ${ok ? 'success' : 'error'}`
+      el.style.display = 'block'
+      setTimeout(() => el.style.display = 'none', 3000)
+    }
+
+    async function generatePasscode() {
+      const type = document.getElementById('type').value
+      const note = document.getElementById('note').value
+      try {
+        const res = await fetch(`${API}/v1/admin/passcodes/generate`, {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ type, note: note || undefined })
+        })
+        const data = await res.json()
+        if (data.code) {
+          showStatus(`Generated: ${data.code}`, true)
+          loadPasscodes()
+        } else {
+          showStatus(data.error || 'Failed', false)
+        }
+      } catch (e) {
+        showStatus('Error: ' + e.message, false)
+      }
+    }
+
+    async function loadPasscodes() {
+      try {
+        const res = await fetch(`${API}/v1/admin/passcodes`, { headers: headers() })
+        const data = await res.json()
+        const tbody = document.getElementById('passcodes')
+        tbody.innerHTML = (data.passcodes || []).map(p => `
+          <tr>
+            <td><span class="code">${p.code}</span></td>
+            <td><span class="badge ${p.type}">${p.type}</span></td>
+            <td>${new Date(p.created_at).toLocaleDateString()}</td>
+            <td>${new Date(p.expires_at).toLocaleDateString()}</td>
+            <td>${p.current_uses}${p.max_uses ? '/' + p.max_uses : ''}</td>
+            <td><span class="badge ${p.blocked ? 'blocked' : 'active'}">${p.blocked ? 'Blocked' : 'Active'}</span></td>
+            <td>${p.note || '-'}</td>
+            <td class="actions">
+              <button class="secondary" onclick="togglePasscode('${p.id}', ${!p.blocked})">${p.blocked ? 'Unblock' : 'Block'}</button>
+              <button class="danger" onclick="deletePasscode('${p.id}')">Delete</button>
+            </td>
+          </tr>
+        `).join('')
+      } catch (e) {
+        showStatus('Error loading passcodes: ' + e.message, false)
+      }
+    }
+
+    async function loadInstalls() {
+      try {
+        const res = await fetch(`${API}/v1/admin/installs`, { headers: headers() })
+        const data = await res.json()
+        const tbody = document.getElementById('installs')
+        tbody.innerHTML = (data.installs || []).map(i => `
+          <tr>
+            <td><span class="code">${i.machine_id.substring(0, 8)}...</span></td>
+            <td>${i.platform}</td>
+            <td>${i.arch}</td>
+            <td>${new Date(i.registered_at).toLocaleDateString()}</td>
+            <td>${new Date(i.last_seen_at).toLocaleDateString()}</td>
+            <td><span class="badge ${i.blocked ? 'blocked' : 'active'}">${i.blocked ? 'Blocked' : 'Active'}</span></td>
+            <td class="actions">
+              <button class="secondary" onclick="toggleInstall('${i.id}', ${!i.blocked})">${i.blocked ? 'Unblock' : 'Block'}</button>
+              <button class="danger" onclick="deleteInstall('${i.id}')">Delete</button>
+            </td>
+          </tr>
+        `).join('')
+      } catch (e) {
+        showStatus('Error loading installs: ' + e.message, false)
+      }
+    }
+
+    async function togglePasscode(id, block) {
+      await fetch(`${API}/v1/admin/passcodes/${id}`, {
+        method: 'PATCH', headers: headers(),
+        body: JSON.stringify({ blocked: block })
+      })
+      loadPasscodes()
+    }
+
+    async function deletePasscode(id) {
+      if (!confirm('Delete this passcode?')) return
+      await fetch(`${API}/v1/admin/passcodes/${id}`, {
+        method: 'DELETE', headers: headers()
+      })
+      loadPasscodes()
+    }
+
+    async function toggleInstall(id, block) {
+      await fetch(`${API}/v1/admin/installs/${id}`, {
+        method: 'PATCH', headers: headers(),
+        body: JSON.stringify({ blocked: block })
+      })
+      loadInstalls()
+    }
+
+    async function deleteInstall(id) {
+      if (!confirm('Delete this install?')) return
+      await fetch(`${API}/v1/admin/installs/${id}`, {
+        method: 'DELETE', headers: headers()
+      })
+      loadInstalls()
+    }
+
+    async function issuePasscode() {
+      const body = {
+        name: document.getElementById('cname').value || undefined,
+        email: document.getElementById('cemail').value || undefined,
+        reference: document.getElementById('cref').value || undefined,
+        phone: document.getElementById('cphone').value || undefined,
+        days: Number(document.getElementById('cdays').value)
+      }
+      if (!body.email && !body.reference) {
+        showStatus('Provide at least an email or reference', false)
+        return
+      }
+      try {
+        const res = await fetch(`${API}/v1/admin/passcodes/issue`, {
+          method: 'POST', headers: headers(), body: JSON.stringify(body)
+        })
+        const data = await res.json()
+        const el = document.getElementById('issueResult')
+        if (data.ok) {
+          el.innerHTML = `<div class="status success" style="display:block">
+            ${data.renewed ? '🔄 Renewed' : '✅ New passcode'} for ${data.customer.name || 'customer'}<br>
+            <strong style="font-size:20px;letter-spacing:2px">${data.passcode.code}</strong><br>
+            <span style="font-size:12px">Expires ${new Date(data.passcode.expires_at).toLocaleString()}</span>
+          </div>`
+          loadPasscodes(); loadCustomers()
+        } else {
+          el.innerHTML = `<div class="status error" style="display:block">${data.error || 'Failed'}</div>`
+        }
+      } catch (e) {
+        showStatus('Error: ' + e.message, false)
+      }
+    }
+
+    async function loadCustomers() {
+      try {
+        const res = await fetch(`${API}/v1/admin/customers`, { headers: headers() })
+        const data = await res.json()
+        const tbody = document.getElementById('customers')
+        tbody.innerHTML = (data.customers || []).map(c => `
+          <tr>
+            <td>${c.name || '-'}</td>
+            <td>${c.email || '-'}</td>
+            <td>${c.reference || '-'}</td>
+            <td>${c.last_payment_at ? new Date(c.last_payment_at).toLocaleDateString() : '-'}</td>
+            <td>${c.passcode_id ? '<span class="badge active">linked</span>' : '<span class="badge blocked">none</span>'}</td>
+            <td><button class="danger" onclick="deleteCustomer('${c.id}')">Delete</button></td>
+          </tr>
+        `).join('')
+      } catch (e) {}
+    }
+
+    async function deleteCustomer(id) {
+      if (!confirm('Delete this customer record?')) return
+      await fetch(`${API}/v1/admin/customers/${id}`, {
+        method: 'DELETE', headers: headers()
+      })
+      loadCustomers()
+    }
+
+    loadPasscodes()
+    loadInstalls()
+    loadCustomers()
+  </script>
+</body>
+</html>

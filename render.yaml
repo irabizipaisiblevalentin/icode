@@ -1,0 +1,24 @@
+# Render Blueprint for iCode Control
+# Push this repo to Render and it will create the web service + disk + env.
+#
+# After import:
+#   1. Set ADMIN_TOKEN in the service's Environment (required).
+#   2. The Disk "icode_data" is mounted at /app/data automatically.
+#
+services:
+  - type: web
+    name: icode-control
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /v1/health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DATA_DIR
+        value: /app/data
+      - key: ADMIN_TOKEN
+        sync: false   # set it manually in the dashboard after import
+    disk:
+      name: icode_data
+      mountPath: /app/data
+      sizeGB: 1

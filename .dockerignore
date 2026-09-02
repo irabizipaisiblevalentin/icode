@@ -1,0 +1,9 @@
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+.git/
+.gitignore
+DEPLOY.md
+fly.toml
+render.yaml
