@@ -6,6 +6,7 @@ import { join } from "path"
 const DB_PATH = process.env.DB_PATH ?? (process.env.DATA_DIR ? join(process.env.DATA_DIR, "icode-control.db") : "./icode-control.db")
 
 export const ACCESS_DURATION_DAYS = parseInt(process.env.ICODE_ACCESS_DURATION_DAYS ?? "30")
+export const TRIAL_DURATION_DAYS = parseInt(process.env.ICODE_TRIAL_DURATION_DAYS ?? "21")
 export const PAYMENT_AMOUNT_RWF = 1000
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET
@@ -75,6 +76,7 @@ function init(db: Database) {
       last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
       blocked INTEGER NOT NULL DEFAULT 0,
       block_reason TEXT,
+      trial_started_at TEXT,
       FOREIGN KEY (passcode_id) REFERENCES passcodes(id)
     )
   `)
@@ -138,6 +140,10 @@ function init(db: Database) {
     for (const row of rows) {
       db.run(`UPDATE passcodes SET code_hash = ? WHERE id = ?`, [hashCode(row.code), row.id])
     }
+  }
+  const installCols = db.query(`PRAGMA table_info(installs)`).all() as { name: string }[]
+  if (!installCols.some((c) => c.name === "trial_started_at")) {
+    db.run(`ALTER TABLE installs ADD COLUMN trial_started_at TEXT`)
   }
 }
 
@@ -290,6 +296,7 @@ export interface InstallRow {
   last_seen_at: string
   blocked: number
   block_reason: string | null
+  trial_started_at: string | null
 }
 
 export function upsertInstall(opts: {
@@ -359,6 +366,87 @@ export function getUsage(installId: string, periodKey: string): number {
     `SELECT seconds_used FROM usage WHERE install_id = ? AND period_key = ?`,
   ).get(installId, periodKey)
   return row?.seconds_used ?? 0
+}
+
+// ─── Trials ───────────────────────────────────────────────────────────
+
+export interface TrialResult {
+  install: InstallRow
+  passcode: PasscodeRow | null
+  already_started: boolean
+  trial_expires_at: string | null
+}
+
+// Grants a one-time free trial per machine. A trial is issued only once per
+// machine_id; repeat calls return the existing trial (so it cannot be restarted).
+export function startTrial(opts: {
+  machine_id: string
+  platform: string
+  arch: string
+  version?: string
+}): TrialResult {
+  const d = db()
+  let install = d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(opts.machine_id)
+
+  if (install?.trial_started_at) {
+    return {
+      install,
+      passcode: install.passcode_id ? getPasscode(install.passcode_id) : null,
+      already_started: true,
+      trial_expires_at: install.passcode_id ? (getPasscode(install.passcode_id)?.expires_at ?? null) : null,
+    }
+  }
+
+  if (!install) {
+    install = upsertInstall({
+      machine_id: opts.machine_id,
+      platform: opts.platform,
+      arch: opts.arch,
+      version: opts.version,
+    })
+  }
+  d.run(`UPDATE installs SET trial_started_at = datetime('now') WHERE id = ?`, [install.id])
+
+  const expires = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const passcode = createPasscode({ type: "public", expires_at: expires, note: "Free 21-day trial" })
+  d.run(`UPDATE installs SET passcode_id = ? WHERE id = ?`, [passcode.id, install.id])
+
+  writeAudit("TRIAL_STARTED", opts.machine_id, install.id, { machine_id: opts.machine_id })
+  return {
+    install: d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE id = ?`).get(install.id)!,
+    passcode,
+    already_started: false,
+    trial_expires_at: expires,
+  }
+}
+
+// Binds a machine to a validated passcode. Used by the web access page so a
+// CLI waiting on /v1/install/status can see the activation take effect.
+export function activateInstallByCode(opts: {
+  machine_id: string
+  platform: string
+  arch: string
+  version?: string
+  passcode_id: string
+}): InstallRow {
+  const existing = getInstallByMachine(opts.machine_id)
+  if (existing) {
+    db().run(`UPDATE installs SET passcode_id = ?, platform = ?, arch = ?, version = ?, last_seen_at = datetime('now') WHERE machine_id = ?`, [
+      opts.passcode_id,
+      opts.platform,
+      opts.arch,
+      opts.version ?? existing.version,
+      opts.machine_id,
+    ])
+    return getInstallByMachine(opts.machine_id)!
+  }
+  return upsertInstall({
+    machine_id: opts.machine_id,
+    platform: opts.platform,
+    arch: opts.arch,
+    version: opts.version,
+    passcode_id: opts.passcode_id,
+  })
 }
 
 // ─── Payment Requests ────────────────────────────────────────────────

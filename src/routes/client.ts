@@ -5,6 +5,8 @@ import {
   incrementPasscodeUse,
   upsertInstall,
   getInstallByMachine,
+  activateInstallByCode,
+  startTrial,
   addUsage,
 } from "../db"
 import { hitRateLimit } from "../rate-limit"
@@ -158,6 +160,97 @@ export function status(req: StatusRequest): StatusResponse {
     expires_at: passcode.expires_at,
     type: passcode.type,
     message: "OK",
+  }
+}
+
+// ─── Trial ────────────────────────────────────────────────────────────
+
+export interface TrialRequest {
+  machine_id: string
+  platform: string
+  arch: string
+  version?: string
+}
+
+export interface TrialResponse {
+  ok: boolean
+  trial_active: boolean
+  trial_expired: boolean
+  already_started: boolean
+  expires_at: string | null
+  message: string
+}
+
+// Grants or reports a one-time free trial for a machine.
+export function trial(req: TrialRequest): TrialResponse {
+  const result = startTrial({
+    machine_id: req.machine_id,
+    platform: req.platform,
+    arch: req.arch,
+    version: req.version,
+  })
+  const expiresAt = result.trial_expires_at
+  const active = !!expiresAt && new Date(expiresAt) > new Date()
+
+  return {
+    ok: true,
+    trial_active: active,
+    trial_expired: !!expiresAt && !active,
+    already_started: result.already_started,
+    expires_at: expiresAt,
+    message: active
+      ? "Trial yakomeje."
+      : "Trial yarashize. Nyamuneka wizihishe kugira ngo ukomeze gukoresha iCode.",
+  }
+}
+
+// ─── Activate (web page binds a machine to a validated passcode) ─────
+
+export interface ActivateRequest {
+  machine_id: string
+  platform: string
+  arch: string
+  version?: string
+  code: string
+}
+
+export interface ActivateResponse {
+  ok: boolean
+  reason?: string
+  message: string
+  passcode_id?: string
+  expires_at?: string
+  type?: "public" | "personal"
+}
+
+export function activateByCode(req: ActivateRequest): ActivateResponse {
+  const code = (req.code ?? "").trim().toUpperCase()
+  if (!code) return { ok: false, reason: "invalid", message: "Passcode ntigomba kuba ubusa." }
+  if (!req.machine_id) return { ok: false, reason: "invalid", message: "machine_id ntibonetse." }
+
+  const passcode = findPasscodeByCode(code)
+  if (!passcode) return { ok: false, reason: "not_found", message: "Passcode ntabwo iboneka." }
+  if (passcode.blocked) return { ok: false, reason: "blocked", message: "Iyi passcode yarahagaritswe." }
+  if (new Date(passcode.expires_at) < new Date()) return { ok: false, reason: "expired", message: "Iyi passcode yarashize." }
+  if (passcode.max_uses !== null && passcode.current_uses >= passcode.max_uses) {
+    return { ok: false, reason: "max_uses", message: "Iyi passcode yageze ku mubare ntarengwa w'ukuyikoresha." }
+  }
+
+  incrementPasscodeUse(passcode.id)
+  activateInstallByCode({
+    machine_id: req.machine_id,
+    platform: req.platform,
+    arch: req.arch,
+    version: req.version,
+    passcode_id: passcode.id,
+  })
+
+  return {
+    ok: true,
+    message: "Passcode yakiriwe. Ubu ushobora gusubira muri terminal.",
+    passcode_id: passcode.id,
+    expires_at: passcode.expires_at,
+    type: passcode.type,
   }
 }
 

@@ -371,6 +371,10 @@
       const btn = document.getElementById('access-btn')
       const result = document.getElementById('access-result')
 
+      // When the CLI opens this page it passes &machine=<machine_id> so a
+      // waiting terminal session can be bound to the validated passcode.
+      const waitMachine = new URLSearchParams(location.search).get('machine')?.trim() || ''
+
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit() })
       btn.addEventListener('click', submit)
 
@@ -386,21 +390,28 @@
         btn.textContent = 'Bikorera...'
         result.className = 'result-panel'
         try {
-            const mid = localStorage.getItem('icode_machine_id') || crypto.randomUUID()
-            localStorage.setItem('icode_machine_id', mid)
-            const res = await fetch(`${API}/v1/passcode/validate`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                code,
-                machine_id: mid,
-                platform: navigator.platform || 'web', arch: 'web'
-              })
+          // In wait mode we bind the code straight to the machine the CLI is
+          // polling. Otherwise fall back to a browser-local machine id.
+          const mid = waitMachine || localStorage.getItem('icode_machine_id') || crypto.randomUUID()
+          if (!waitMachine) localStorage.setItem('icode_machine_id', mid)
+
+          const endpoint = waitMachine ? `${API}/v1/install/activate` : `${API}/v1/passcode/validate`
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code,
+              machine_id: mid,
+              platform: navigator.platform || 'web', arch: 'web'
             })
+          })
           const data = await res.json()
           if (data.ok) {
             localStorage.setItem('icode_passcode', code)
-            showResult(`<strong>Murakaza neza kuri iCode!</strong><br>Passcode yemejwe neza.<br><span style="font-size:13px">Ubu ushobora gukoresha iCode.</span>`, 'success')
+            const back = waitMachine
+              ? '<br><span style="font-size:13px">Ubu subira muri terminal, iCode izatangira gukora.</span>'
+              : '<br><span style="font-size:13px">Ubu ushobora gukoresha iCode.</span>'
+            showResult(`<strong>Murakaza neza kuri iCode!</strong><br>Passcode yemejwe neza.${back}`, 'success')
           } else if (data.rate_limited) {
             showResult('Ugerageje kenshi. Gerageza nyuma y\'akanya kato.', 'info')
           } else if (data.reason === 'blocked') {

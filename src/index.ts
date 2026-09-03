@@ -1,4 +1,4 @@
-import { validate, heartbeat, status, type ValidateRequest, type HeartbeatRequest, type StatusRequest } from "./routes/client"
+import { validate, heartbeat, status, trial, activateByCode, type ValidateRequest, type HeartbeatRequest, type StatusRequest, type TrialRequest, type ActivateRequest } from "./routes/client"
 import {
   isAdminAuth,
   adminListPasscodes,
@@ -83,6 +83,22 @@ const server = Bun.serve({
     if (path === "/v1/install/status" && method === "POST") {
       const body = await parseBody<StatusRequest>(request)
       const result = status(body)
+      return json(result, result.ok ? 200 : 403)
+    }
+
+    if (path === "/v1/trial/start" && method === "POST") {
+      const limiter = hitRateLimit("trial:start", 20, 60_000)
+      if (!limiter.allowed) {
+        return json({ ok: false, error: "Rate limited. Try again shortly." }, 429)
+      }
+      const body = await parseBody<TrialRequest>(request)
+      const result = trial(body)
+      return json(result, 200)
+    }
+
+    if (path === "/v1/install/activate" && method === "POST") {
+      const body = await parseBody<ActivateRequest>(request)
+      const result = activateByCode(body)
       return json(result, result.ok ? 200 : 403)
     }
 
