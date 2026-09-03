@@ -57,3 +57,39 @@ export async function sendPasscodeNotification(msg: NotificationMessage): Promis
     return false
   }
 }
+
+// Alerts the operator when a free trial is close to expiring. Uses the same
+// outbound channel; if none is configured it is a no-op.
+export async function sendTrialExpiryNotification(msg: {
+  machineId: string
+  expiresAt: string
+  platform: string
+}): Promise<boolean> {
+  if (!NOTIFICATION_URL) return false
+  try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    if (NOTIFICATION_TOKEN) headers.Authorization = `Bearer ${NOTIFICATION_TOKEN}`
+    const response = await fetch(NOTIFICATION_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        subject: "iCode Trial Expiring Soon",
+        message: [
+          "A free iCode trial is ending soon.",
+          `Machine: ${msg.machineId}`,
+          `Platform: ${msg.platform || "unknown"}`,
+          `Trial expires: ${msg.expiresAt}`,
+          "Remind the user to pay (1,000 RWF) so access is not interrupted.",
+          "",
+          "— iCode",
+        ].join("\n"),
+        kind: "trial_expiry",
+        machineId: msg.machineId,
+        expiresAt: msg.expiresAt,
+      }),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}

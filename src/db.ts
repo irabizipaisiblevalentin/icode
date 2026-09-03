@@ -90,6 +90,15 @@ function init(db: Database) {
       UNIQUE(install_id, period_key)
     )
   `)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS trial_alerts (
+      machine_id TEXT PRIMARY KEY,
+      passcode_id TEXT,
+      expires_at TEXT,
+      notified_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (passcode_id) REFERENCES passcodes(id)
+    )
+  `)
   db.run(`CREATE INDEX IF NOT EXISTS idx_passcodes_code ON passcodes(code)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_installs_machine ON installs(machine_id)`)
 
@@ -447,6 +456,56 @@ export function activateInstallByCode(opts: {
     version: opts.version,
     passcode_id: opts.passcode_id,
   })
+}
+
+// ─── Trial listing & alerts ───────────────────────────────────────────
+
+export interface TrialListItem {
+  install_id: string
+  machine_id: string
+  platform: string
+  arch: string
+  version: string | null
+  passcode_id: string | null
+  trial_started_at: string
+  expires_at: string | null
+  blocked: number
+}
+
+// Installs that received a free trial, with the linked passcode expiry.
+export function listTrials(): TrialListItem[] {
+  return db().query<TrialListItem, []>(`
+    SELECT i.id AS install_id, i.machine_id, i.platform, i.arch, i.version,
+           i.passcode_id, i.trial_started_at, p.expires_at, i.blocked
+    FROM installs i
+    LEFT JOIN passcodes p ON p.id = i.passcode_id
+    WHERE i.trial_started_at IS NOT NULL
+    ORDER BY i.trial_started_at DESC
+  `).all()
+}
+
+// Trials that are within `hoursWindow` hours of expiry (or already expired) and
+// have not yet been alerted, so the operator can nudge each user once.
+export function listPendingTrialAlerts(hoursWindow: number): TrialListItem[] {
+  const limit = new Date(Date.now() + hoursWindow * 60 * 60 * 1000).toISOString()
+  return db().query<TrialListItem, [string]>(`
+    SELECT i.id AS install_id, i.machine_id, i.platform, i.arch, i.version,
+           i.passcode_id, i.trial_started_at, p.expires_at, i.blocked
+    FROM installs i
+    JOIN passcodes p ON p.id = i.passcode_id
+    WHERE i.trial_started_at IS NOT NULL
+      AND p.expires_at IS NOT NULL
+      AND p.expires_at <= ?
+      AND i.machine_id NOT IN (SELECT machine_id FROM trial_alerts)
+    ORDER BY p.expires_at ASC
+  `).all(limit)
+}
+
+export function markTrialAlerted(machineId: string, passcodeId: string | null, expiresAt: string): void {
+  db().run(
+    `INSERT OR REPLACE INTO trial_alerts (machine_id, passcode_id, expires_at) VALUES (?, ?, ?)`,
+    [machineId, passcodeId, expiresAt],
+  )
 }
 
 // ─── Payment Requests ────────────────────────────────────────────────

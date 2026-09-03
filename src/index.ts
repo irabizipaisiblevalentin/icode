@@ -14,6 +14,7 @@ import {
   adminCreatePasscode,
   adminIssuePasscode,
   adminListCustomers,
+  adminListTrials,
   adminDeleteCustomer,
   type AdminPasscodeCreateRequest,
   type IssuePasscodeRequest,
@@ -27,8 +28,17 @@ import {
   type WebhookFormInput,
   type ApproveRequest,
 } from "./routes/payments"
-import { listPaymentRequests, getPaymentRequest, getPaymentStats, listAuditLog, isValidWebhook } from "./db"
+import {
+  listPaymentRequests,
+  getPaymentRequest,
+  getPaymentStats,
+  listAuditLog,
+  isValidWebhook,
+  listPendingTrialAlerts,
+  markTrialAlerted,
+} from "./db"
 import { hitRateLimit } from "./rate-limit"
+import { sendTrialExpiryNotification } from "./notify"
 
 const PORT = parseInt(process.env.PORT ?? "4097")
 const DASHBOARD_PATH = new URL("../public/index.html", import.meta.url).pathname
@@ -225,6 +235,11 @@ const server = Bun.serve({
         return json(adminListInstalls())
       }
 
+      // Trials
+      if (path === "/v1/admin/trials" && method === "GET") {
+        return json(adminListTrials())
+      }
+
       // Customers
       if (path === "/v1/admin/customers" && method === "GET") {
         return json(adminListCustomers())
@@ -257,3 +272,32 @@ const server = Bun.serve({
 })
 
 console.log(`iCode Control Server running on port ${server.port}`)
+
+// ─── Trial expiry scheduler ───────────────────────────────────────────
+// Checks every hour for trials expiring within 48h that haven't been alerted
+// yet, and fires the outbound notification once per machine. No-op unless
+// NOTIFICATION_WEBHOOK_URL is configured.
+const TRIAL_ALERT_WINDOW_HOURS = 48
+
+async function checkTrialExpiries(): Promise<void> {
+  try {
+    const pending = listPendingTrialAlerts(TRIAL_ALERT_WINDOW_HOURS)
+    for (const t of pending) {
+      const sent = await sendTrialExpiryNotification({
+        machineId: t.machine_id,
+        expiresAt: t.expires_at ?? "",
+        platform: t.platform,
+      })
+      if (sent) {
+        markTrialAlerted(t.machine_id, t.passcode_id, t.expires_at ?? "")
+      }
+    }
+  } catch (e) {
+    // Scheduler must never crash the server.
+  }
+}
+
+setInterval(checkTrialExpiries, 60 * 60 * 1000)
+// Fire once shortly after boot so an already-due trial gets noticed.
+setTimeout(checkTrialExpiries, 5_000)
+

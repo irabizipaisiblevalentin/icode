@@ -196,6 +196,7 @@
         <a href="#" data-tab="dashboard" class="active">Dashboard</a>
         <a href="#" data-tab="requests">Payment Requests</a>
         <a href="#" data-tab="passcodes">Passcodes</a>
+        <a href="#" data-tab="trials">Trials</a>
         <a href="#" data-tab="tools">Tools</a>
         <a href="#" data-tab="audit">Audit Log</a>
       </nav>
@@ -304,6 +305,26 @@
           </table>
         </div>
         <div id="audit-loading" class="empty">Yigendaje...</div>
+      </div>
+    </div>
+
+    <div id="tab-trials" class="hidden">
+      <div class="card">
+        <h2>Free Trials</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Machines that started a free trial, with status and expiry. Remind them to pay (1,000 RWF) before it ends.</p>
+        <div class="stats-grid" style="margin-top:10px">
+          <div class="stat"><div class="label">Active trials</div><div class="value accent" id="trl-active">-</div></div>
+          <div class="stat"><div class="label">Expired/ending</div><div class="value danger" id="trl-expired">-</div></div>
+        </div>
+        <div class="table-wrap" style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>Machine</th><th>Platform</th><th>Trial started</th><th>Expires</th><th>Status</th>
+            </tr></thead>
+            <tbody id="trl-table"></tbody>
+          </table>
+        </div>
+        <div id="trl-loading" class="empty">Yigendaje...</div>
       </div>
     </div>
 
@@ -480,12 +501,13 @@
 
     function setTab(tab) {
       document.querySelectorAll('.admin-nav a').forEach(a => a.classList.toggle('active', a.getAttribute('data-tab') === tab))
-      ;['dashboard','requests','passcodes','tools','audit'].forEach(t => {
+      ;['dashboard','requests','passcodes','trials','tools','audit'].forEach(t => {
         document.getElementById('tab-'+t).classList.toggle('hidden', t !== tab)
       })
       if (tab === 'dashboard') loadStats()
       if (tab === 'requests') loadRequests(true)
       if (tab === 'passcodes') loadPasscodes()
+      if (tab === 'trials') loadTrials()
       if (tab === 'tools') loadStats()
       if (tab === 'audit') loadAudit()
     }
@@ -701,6 +723,33 @@
             <td class="actions">
               ${!p.blocked ? `<button class="danger" onclick="promptRevoke('${p.id}')">Revoke</button>` : `<button class="secondary" onclick="reactivatePass('${p.id}')">Reactivate</button>`}
             </td>
+          </tr>`
+        }).join('')
+      } catch(e) {}
+    }
+
+    async function loadTrials() {
+      try {
+        const data = await api('/v1/admin/trials')
+        const trials = data.trials || []
+        const tbody = document.getElementById('trl-table')
+        const loading = document.getElementById('trl-loading')
+        const now = new Date()
+        const withStatus = trials.map(t => ({ ...t, expired: !!(t.expires_at && new Date(t.expires_at) < now) }))
+        document.getElementById('trl-active').textContent = withStatus.filter(t => !t.expired).length
+        document.getElementById('trl-expired').textContent = withStatus.filter(t => t.expired).length
+        if (!trials.length) {
+          tbody.innerHTML = ''; loading.style.display = 'block'; loading.textContent = 'Nta trial ihari (No trials yet).'; return
+        }
+        loading.style.display = 'none'
+        tbody.innerHTML = withStatus.map(t => {
+          const shortId = (t.machine_id || '').slice(0, 8)
+          return `<tr>
+            <td><span class="code">${escapeHtml(shortId)}</span></td>
+            <td>${escapeHtml(t.platform || '-')}</td>
+            <td>${t.trial_started_at ? new Date(t.trial_started_at.replace(' ', 'T')).toLocaleDateString() : '-'}</td>
+            <td>${t.expires_at ? new Date(t.expires_at).toLocaleDateString() : '-'}</td>
+            <td><span class="badge ${t.expired ? 'danger' : 'active'}">${t.expired ? 'Ended/Expired' : t.blocked ? 'Blocked' : 'Active'}</span></td>
           </tr>`
         }).join('')
       } catch(e) {}
