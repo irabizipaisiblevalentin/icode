@@ -210,15 +210,16 @@ const server = Bun.serve({
         return json(result, 201)
       }
 
+      const passcodeSubMatch = path.match(/^\/v1\/admin\/passcodes\/([^/]+)\/(revoke|reactivate)$/)
+      if (passcodeSubMatch && method === "POST") {
+        const id = passcodeSubMatch[1]
+        if (passcodeSubMatch[2] === "revoke") return json(adminRevokePasscode(id))
+        return json(adminReactivatePasscode(id))
+      }
+
       const passcodeMatch = path.match(/^\/v1\/admin\/passcodes\/([^/]+)$/)
       if (passcodeMatch) {
         const id = passcodeMatch[1]
-        if (path.endsWith("/revoke") && method === "POST") {
-          return json(adminRevokePasscode(id))
-        }
-        if (path.endsWith("/reactivate") && method === "POST") {
-          return json(adminReactivatePasscode(id))
-        }
         if (method === "PATCH") {
           const body = await parseBody<{ blocked?: boolean }>(request)
           if (body.blocked === true) return json(adminBlockPasscode(id))

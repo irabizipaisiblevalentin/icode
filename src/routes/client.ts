@@ -47,13 +47,13 @@ export function validate(req: ValidateRequest): ValidateResponse {
   }
   const passcode = findPasscodeByCode(req.code)
   if (!passcode) {
-    return { ok: false, reason: "not_found", message: "Passcode ntabwo iboneka." }
+    return { ok: false, reason: "not_found", message: "Passcode siyo. Reba neza Passcode wahawe na Admin hanyuma wongere ugerageze." }
   }
   if (passcode.blocked) {
-    return { ok: false, reason: "blocked", message: "Iyi passcode yarahagaritswe." }
+    return { ok: false, reason: "blocked", message: "Uburenganzira bwo gukoresha iCode kuri iyi Passcode bwahagaritswe. Nyamuneka hamagara Admin wa iCode." }
   }
   if (new Date(passcode.expires_at) < new Date()) {
-    return { ok: false, reason: "expired", message: "Iyi passcode yarashize." }
+    return { ok: false, reason: "expired", message: "Passcode yawe yararangiye. Kwishyura 1,000 RWF hanyuma uzuze Google Form kugira ngo ubone Passcode.." }
   }
   if (passcode.max_uses !== null && passcode.current_uses >= passcode.max_uses) {
     return { ok: false, reason: "max_uses", message: "Iyi passcode yageze ku mubare wayo ntarengwa w'ukuyikoresha." }
@@ -93,10 +93,10 @@ export interface HeartbeatResponse {
 export function heartbeat(req: HeartbeatRequest): HeartbeatResponse {
   const install = getInstallByMachine(req.machine_id)
   if (!install) {
-    return { ok: false, message: "Install not registered." }
+    return { ok: false, message: "Uyu muyoboro ntwarandikishwa." }
   }
   if (install.blocked) {
-    return { ok: false, blocked: true, message: "This installation has been blocked." }
+    return { ok: false, blocked: true, message: "Uburenganzira bwo gukoresha iCode bwahagaritswe." }
   }
 
   const now = new Date()
@@ -119,6 +119,7 @@ export interface StatusResponse {
   passcode_valid?: boolean
   passcode_blocked?: boolean
   passcode_expired?: boolean
+  access_revoked?: boolean
   expires_at?: string
   type?: string
   remaining_seconds?: number
@@ -131,7 +132,7 @@ export function status(req: StatusRequest): StatusResponse {
     return { ok: false, message: "Uyu muyoboro ntwarandikishwa." }
   }
   if (install.blocked) {
-    return { ok: false, blocked: true, message: "Uyu muyoboro (installation) warahagaritswe." }
+    return { ok: false, blocked: true, access_revoked: true, message: "Uburenganzira bwo gukoresha iCode bwahagaritswe. Nyamuneka hamagara Admin wa iCode." }
   }
 
   const passcode = install.passcode_id ? getPasscode(install.passcode_id) : null
@@ -141,8 +142,8 @@ export function status(req: StatusRequest): StatusResponse {
 
   const now = new Date()
   const blockReason =
-    passcode.blocked ? "Passcode yawe yarahagaritswe."
-    : new Date(passcode.expires_at) < now ? "Passcode yawe yarashize."
+    passcode.blocked ? "Uburenganzira bwo gukoresha iCode bwahagaritswe. Nyamuneka hamagara Admin wa iCode."
+    : new Date(passcode.expires_at) < now ? "Igihe cy'igerageza cyarangiye. Kugira ngo ukomeze gukoresha iCode, ugomba kwishyura 1,000 RWF no kubona Passcode."
     : null
   if (blockReason) {
     return {
@@ -150,6 +151,7 @@ export function status(req: StatusRequest): StatusResponse {
       passcode_valid: true,
       passcode_blocked: !!passcode.blocked,
       passcode_expired: new Date(passcode.expires_at) < now,
+      access_revoked: !!passcode.blocked,
       message: blockReason,
     }
   }
@@ -178,6 +180,7 @@ export interface TrialResponse {
   trial_expired: boolean
   already_started: boolean
   expires_at: string | null
+  remaining_days?: number
   message: string
 }
 
@@ -191,6 +194,8 @@ export function trial(req: TrialRequest): TrialResponse {
   })
   const expiresAt = result.trial_expires_at
   const active = !!expiresAt && new Date(expiresAt) > new Date()
+  const remainingMs = active && expiresAt ? new Date(expiresAt).getTime() - Date.now() : 0
+  const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)))
 
   return {
     ok: true,
@@ -198,9 +203,10 @@ export function trial(req: TrialRequest): TrialResponse {
     trial_expired: !!expiresAt && !active,
     already_started: result.already_started,
     expires_at: expiresAt,
+    remaining_days: active ? remainingDays : 0,
     message: active
       ? "Trial yakomeje."
-      : "Trial yarashize. Nyamuneka wizihishe kugira ngo ukomeze gukoresha iCode.",
+      : "Trial yararangiye. Nyamuneka wizihishe kugira ngo ukomeze gukoresha iCode.",
   }
 }
 

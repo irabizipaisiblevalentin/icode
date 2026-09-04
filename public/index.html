@@ -106,7 +106,7 @@
     .access-shell { min-height: 100vh; display: flex; flex-direction: column; }
     .access-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 26px; border-bottom: 1px solid var(--border); }
     .access-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 30px 20px; }
-    .access-box { max-width: 460px; width: 100%; }
+    .access-box { max-width: 500px; width: 100%; }
     .access-title { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 8px; }
     .access-title .accent { color: var(--accent); }
     .access-sub { color: var(--muted); font-size: 15px; margin-bottom: 26px; line-height: 1.5; }
@@ -131,6 +131,50 @@
     .result-panel.error { background: #330000; border: 1px solid var(--danger); color: var(--danger); }
     .result-panel.info { background: #1a1600; border: 1px solid var(--warn); color: var(--warn); }
     .copied { font-size: 12px; color: var(--accent); }
+
+    /* Trial success view */
+    .trial-success { text-align: center; margin-bottom: 24px; }
+    .trial-success .trial-icon { font-size: 48px; margin-bottom: 12px; }
+    .trial-success h2 { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .trial-success .trial-sub { color: var(--muted); font-size: 15px; margin-bottom: 20px; line-height: 1.5; }
+    .trial-countdown { display: flex; justify-content: center; gap: 16px; margin: 16px 0; }
+    .trial-countdown .count-item { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; min-width: 70px; }
+    .trial-countdown .count-num { font-size: 28px; font-weight: 800; color: var(--accent); }
+    .trial-countdown .count-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-top: 2px; }
+    .trial-expiry-date { color: var(--muted); font-size: 14px; margin-top: 12px; }
+    .trial-expiry-date strong { color: var(--text); }
+
+    /* Payment + Form section */
+    .pay-section { margin-top: 20px; }
+    .pay-section h3 { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 14px; }
+    .pay-amount { display: flex; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(135deg, #003300, #001a00); border: 1px solid var(--accent); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .pay-amount .amount { font-size: 28px; font-weight: 800; color: var(--accent); }
+    .pay-amount .currency { font-size: 16px; color: var(--accent-dim); }
+    .payment-methods { display: grid; gap: 12px; margin-bottom: 16px; }
+    .payment-method { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+    .payment-method .method-name { font-weight: 700; color: #fff; font-size: 14px; }
+    .payment-method .method-detail { color: var(--muted); font-size: 13px; }
+    .payment-method .method-code { font-family: monospace; font-weight: 700; color: var(--accent); font-size: 16px; letter-spacing: 1px; }
+
+    .form-note { background: #1a1600; border: 1px solid #5c4a00; border-radius: 10px; padding: 14px; margin-bottom: 16px; font-size: 13px; color: var(--warn); line-height: 1.5; }
+    .form-note strong { color: #fff; }
+
+    .form-btn {
+      display: block; width: 100%; padding: 16px; font-size: 16px; font-weight: 700;
+      background: var(--accent); color: #000; border: none; border-radius: 10px;
+      cursor: pointer; text-align: center; text-decoration: none;
+      transition: transform .05s ease, background .15s ease; margin-bottom: 8px;
+    }
+    .form-btn:hover { background: var(--accent-dim); }
+    .form-btn:active { transform: scale(.98); }
+    .form-btn-sub { text-align: center; color: var(--muted); font-size: 12px; margin-bottom: 20px; }
+
+    /* Passcode entry section */
+    .passcode-section { margin-top: 8px; }
+    .passcode-section h3 { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+    .passcode-section .passcode-sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+    .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: var(--muted); font-size: 13px; }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
     .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
     .tab { background: transparent; color: var(--muted); padding: 12px 18px; border-radius: 0; border-bottom: 2px solid transparent; font-weight: 600; }
@@ -161,7 +205,7 @@
       <a href="/admin" style="color:var(--muted);font-size:13px;text-decoration:none">Admin</a>
     </header>
     <main class="access-main">
-      <div class="access-box">
+      <div class="access-box" id="access-box">
         <div class="access-title">Murakaza neza kuri <span class="accent">iCode</span></div>
         <div class="access-sub">Shyiramo Passcode yawe kugira ngo utangire gukoresha iCode.</div>
 
@@ -170,16 +214,43 @@
 
         <div id="access-result" class="result-panel"></div>
 
-        <div class="access-alternate">
-          Nta Passcode ufite?
-          <a href="https://forms.gle/48iUwJ2nCBU6uwQc8" target="_blank" rel="noopener">Kwishyura hano &amp; ohereza uburyo bwo kwishyura</a>
+        <div class="divider">cyangwa</div>
+
+        <div class="pay-section">
+          <div class="pay-amount">
+            <span class="amount">1,000</span>
+            <span class="currency">RWF</span>
+          </div>
+
+          <div class="payment-methods">
+            <div class="payment-method">
+              <span class="method-name">MTN Mobile Money</span>
+              <span class="method-code">1787240</span>
+              <span class="method-detail">Paisible Valentin</span>
+            </div>
+            <div class="payment-method">
+              <span class="method-name">BK Bank</span>
+              <span class="method-code">100269073874</span>
+              <span class="method-detail">Paisible Valentin Irabizi</span>
+            </div>
+          </div>
+
+          <div class="form-note">
+            <strong>Kwishyura byonyine ntibihagije.</strong><br>
+            Ugomba no kuzuza Google Form kugira ngo ubwishyu bwawe bugenzurwe kandi ubone Passcode.
+          </div>
+
+          <a class="form-btn" href="https://forms.gle/48iUwJ2nCBU6uwQc8" target="_blank" rel="noopener">NISHYUYE — NUZUZA FORM</a>
+          <div class="form-btn-sub">Nyuma yo kwishyura, uzuzze form hanyuma utegereze Admin kugenzura.</div>
         </div>
 
-        <div class="pay-info">
-          <h3>Kwishyura · 1,000 RWF</h3>
-          <div class="pay-row"><span class="lbl">MTN MoMo</span><span class="val"><span class="code-sm">1787240</span> · Paisible Valentin</span></div>
-          <div class="pay-row"><span class="lbl">BK Bank</span><span class="val"><span class="code-sm">100269073874</span> · Paisible Valentin Irabizi</span></div>
-          <div class="pay-row" style="margin-top:6px;border-top:1px solid var(--border);padding-top:10px"><span class="lbl">Required</span><span class="val" style="color:var(--accent)">1,000 RWF</span></div>
+        <div class="divider">cyangwa</div>
+
+        <div class="passcode-section">
+          <h3>Ufite Passcode?</h3>
+          <div class="passcode-sub">Andikamo Passcode wahawe na Admin.</div>
+          <input id="access-input-bottom" class="access-input" type="text" placeholder="ICODE-XXXX-XXXX" autocomplete="off" spellcheck="false" inputmode="text">
+          <button id="access-btn-bottom" class="access-btn">Komeza</button>
         </div>
       </div>
     </main>
@@ -388,28 +459,122 @@
 
     // ═══════════ ACCESS PAGE ═══════════
     async function initAccess() {
-      const input = document.getElementById('access-input')
-      const btn = document.getElementById('access-btn')
       const result = document.getElementById('access-result')
 
       // When the CLI opens this page it passes &machine=<machine_id> so a
       // waiting terminal session can be bound to the validated passcode.
       const waitMachine = new URLSearchParams(location.search).get('machine')?.trim() || ''
+      // On a fresh install the CLI opens the page with these params so we can
+      // show a web confirmation that the 3-week free trial is enabled.
+      const trialStarted = new URLSearchParams(location.search).get('trial_started')
+      const trialExpires = new URLSearchParams(location.search).get('expires') || ''
+
+      // Show the "trial enabled" web message (first run) instead of the form.
+      if (trialStarted) {
+        const box = document.getElementById('access-box')
+        const expires = trialExpires ? new Date(trialExpires) : null
+        const now = new Date()
+        const remainingMs = expires ? expires.getTime() - now.getTime() : 0
+        const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)))
+        const expiresStr = expires ? expires.toLocaleDateString('rw-RW', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
+
+        box.innerHTML = `
+          <div class="trial-success">
+            <div class="trial-icon">🎉</div>
+            <h2>Murakaza neza kuri <span style="color:var(--accent)">iCode</span>!</h2>
+            <div class="trial-sub">Ufite igihe cy'igerageza cy'ibyumweru 3.</div>
+
+            <div class="trial-countdown">
+              <div class="count-item">
+                <div class="count-num" id="trial-days">${remainingDays}</div>
+                <div class="count-lbl">Iminsi</div>
+              </div>
+            </div>
+
+            <div class="trial-expiry-date">
+              Igihe cy'igerageza kirarangiye: <strong>${expiresStr}</strong>
+            </div>
+
+            <div style="margin-top:20px;color:var(--muted);font-size:14px;line-height:1.5">
+              Ubu ushobora gukoresha iCode ku buntu mu gihe cy'iminsi ${remainingDays}.
+              <br>Nyuma y'iyi trial, ugomba kwishyura <strong style="color:var(--accent)">1,000 RWF</strong> kugira ngo ukomeze.
+            </div>
+          </div>
+
+          <div class="pay-section">
+            <div class="pay-amount">
+              <span class="amount">1,000</span>
+              <span class="currency">RWF</span>
+            </div>
+            <div class="payment-methods">
+              <div class="payment-method">
+                <span class="method-name">MTN Mobile Money</span>
+                <span class="method-code">1787240</span>
+                <span class="method-detail">Paisible Valentin</span>
+              </div>
+              <div class="payment-method">
+                <span class="method-name">BK Bank</span>
+                <span class="method-code">100269073874</span>
+                <span class="method-detail">Paisible Valentin Irabizi</span>
+              </div>
+            </div>
+            <div class="form-note">
+              <strong>Kwishyura byonyine ntibihagije.</strong><br>
+              Ugomba no kuzuza Google Form kugira ngo ubwishyu bwawe bugenzurwe kandi ubone Passcode.
+            </div>
+            <a class="form-btn" href="https://forms.gle/48iUwJ2nCBU6uwQc8" target="_blank" rel="noopener">NISHYUYE — NUZUZA FORM</a>
+            <div class="form-btn-sub">Nyuma yo kwishyura, uzuzze form hanyuma utegereze Admin kugenzura.</div>
+          </div>
+
+          <div class="divider">cyangwa</div>
+
+          <div class="passcode-section">
+            <h3>Ufite Passcode?</h3>
+            <div class="passcode-sub">Andikamo Passcode wahawe na Admin.</div>
+            <input id="access-input" class="access-input" type="text" placeholder="ICODE-XXXX-XXXX" autocomplete="off" spellcheck="false" inputmode="text">
+            <button id="access-btn" class="access-btn">Komeza</button>
+            <div id="access-result" class="result-panel" style="margin-top:10px"></div>
+          </div>
+
+          <div style="text-align:center;margin-top:24px">
+            <div style="color:var(--muted);font-size:13px">
+              Subira kuri Terminal maze wongere ukoreshe: <code style="color:var(--accent)">icode</code>
+            </div>
+          </div>
+        `
+
+        // Re-attach handlers for the new input
+        const newInput = document.getElementById('access-input')
+        const newBtn = document.getElementById('access-btn')
+        const newResult = document.getElementById('access-result')
+        newInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitToResult(newInput, newBtn, newResult) })
+        newBtn.addEventListener('click', () => submitToResult(newInput, newBtn, newResult))
+
+        box.scrollIntoView({ behavior: 'auto', block: 'center' })
+        return
+      }
+
+      // Normal passcode entry mode
+      const input = document.getElementById('access-input')
+      const btn = document.getElementById('access-btn')
+      const inputBottom = document.getElementById('access-input-bottom')
+      const btnBottom = document.getElementById('access-btn-bottom')
 
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit() })
       btn.addEventListener('click', submit)
+      inputBottom.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitBottom() })
+      btnBottom.addEventListener('click', submitBottom)
 
-      function showResult(html, type) {
-        result.innerHTML = html
-        result.className = 'result-panel show ' + type
+      function showResult(html, type, target) {
+        target.innerHTML = html
+        target.className = 'result-panel show ' + type
       }
 
-      async function submit() {
-        const code = input.value.trim().toUpperCase()
-        if (!code) { showResult('Andika Passcode yawe.', 'error'); return }
-        btn.disabled = true
-        btn.textContent = 'Bikorera...'
-        result.className = 'result-panel'
+      async function doActivate(code, resultEl, btnEl) {
+        if (!code) { showResult('Andika Passcode yawe.', 'error', resultEl); return }
+        btnEl.disabled = true
+        btnEl.textContent = 'Bikorera...'
+        resultEl.className = 'result-panel'
         try {
           // In wait mode we bind the code straight to the machine the CLI is
           // polling. Otherwise fall back to a browser-local machine id.
@@ -430,23 +595,38 @@
           if (data.ok) {
             localStorage.setItem('icode_passcode', code)
             const back = waitMachine
-              ? '<br><span style="font-size:13px">Ubu subira muri terminal, iCode izatangira gukora.</span>'
+              ? '<br><span style="font-size:13px">Subira kuri Terminal maze wongere ukoreshe: <code style="color:var(--accent)">icode</code></span>'
               : '<br><span style="font-size:13px">Ubu ushobora gukoresha iCode.</span>'
-            showResult(`<strong>Murakaza neza kuri iCode!</strong><br>Passcode yemejwe neza.${back}`, 'success')
+            showResult(`<strong>✓ Passcode yemejwe neza!</strong><br>Murakoze!${back}`, 'success', resultEl)
           } else if (data.rate_limited) {
-            showResult('Ugerageje kenshi. Gerageza nyuma y\'akanya kato.', 'info')
+            showResult('Ugerageje kenshi. Gerageza nyuma y\'akanya kato.', 'info', resultEl)
           } else if (data.reason === 'blocked') {
-            showResult('Uburenganzira bwo gukoresha iCode kuri iyi Passcode bwahagaritswe.<br><span style="font-size:13px">Nyamuneka hamagara ushinzwe iCode.</span>', 'error')
+            showResult('Uburenganzira bwo gukoresha iCode kuri iyi Passcode bwahagaritswe.<br><span style="font-size:13px">Nyamuneka hamagara ushinzwe iCode.</span>', 'error', resultEl)
           } else if (data.reason === 'expired') {
-            showResult('Passcode yawe yararangiye.<br><span style="font-size:13px">Twandikire cyangwa ukurikize amabwiriza yo kongera kubona uburenganzira bwo gukoresha iCode.</span>', 'info')
+            showResult('Passcode yawe yararangiye.<br><span style="font-size:13px">Kwishyura 1,000 RWF hanyuma uzuze Google Form kugira ngo ubone Passcode.</span>', 'info', resultEl)
           } else {
-            showResult('Passcode siyo.<br><span style="font-size:13px">Reba neza ko wanditse Passcode yawe neza wongere ugerageze.</span>', 'error')
+            showResult('Passcode siyo.<br><span style="font-size:13px">Reba neza Passcode wahawe na Admin hanyuma wongere ugerageze.</span>', 'error', resultEl)
           }
         } catch (e) {
-          showResult('Netiike ntikora. Gerageza nyuma.', 'error')
+          showResult('Netiike ntikora. Gerageza nyuma.', 'error', resultEl)
         }
-        btn.disabled = false
-        btn.textContent = 'Komeza kuri iCode'
+        btnEl.disabled = false
+        btnEl.textContent = 'Komeza'
+      }
+
+      async function submit() {
+        const code = input.value.trim().toUpperCase()
+        await doActivate(code, result, btn)
+      }
+
+      async function submitBottom() {
+        const code = inputBottom.value.trim().toUpperCase()
+        await doActivate(code, document.getElementById('access-result'), btnBottom)
+      }
+
+      async function submitToResult(inputEl, btnEl, resultEl) {
+        const code = inputEl.value.trim().toUpperCase()
+        await doActivate(code, resultEl, btnEl)
       }
     }
 
