@@ -26,10 +26,13 @@ Free **21-day trial** → browser passcode gate → resume iCode CLI in terminal
 - Live on Render at the URL above (old `icode-2` URL is dead).
 - Real creds in `data/.env.runtime` (chmod 600, gitignored): `ADMIN_TOKEN`,
   `WEBHOOK_SECRET`, etc. (see `RENDER_SETUP.txt`, gitignored).
-- Committed & pushed: `4146987` (notifications / code masking), `028b7a2`
-  (trial + activate).
+- Latest commits pushed: `4146987` (notifications / code masking), `028b7a2`
+  (trial + activate), `67567db` (access-page UX redesign, Kinyarwanda messages,
+  `remaining_days` in trial response, `/v1/admin/passcodes/:id/{revoke,reactivate}`
+  route fix). All deployed live on Render (`/v1/health` OK).
 - Full feature set: trial/activate endpoints, webhook, audit log, admin masking,
-  rate limiting, spec-compliant payment handling (exact 1000 RWF, dup detection).
+  rate limiting, spec-compliant payment handling (exact 1000 RWF, dup detection),
+  access-page redesign with payment methods + Google Form CTA.
 
 ---
 
@@ -67,53 +70,58 @@ Changed files (all in `/home/valentin/icode/icode-control-deploy`):
 
 ---
 
-## 5. npm distribution — DONE & fully verified
+## 5. npm distribution — DONE & fully verified (gate LIVE)
 End-user install:
 ```sh
 npm install -g @vln.codes__/icode
 ```
 Then run `icode` (TUI), `icode run "..."`, `icode --help`.
 
-Verified end-to-end:
-- **Launcher** `@vln.codes__/icode@1.0.2` → `bin/icode.js` resolves + spawns a
-  platform binary (esbuild-style `optionalDependencies`).
-- **All 6 platform binaries published** @ `1.0.0`:
-  `@vln.codes__/icode-{linux,darwin,windows}-{x64,arm64}`.
-- **Tested:** clean global install in isolated prefix → `icode --version` →
-  `0.0.0-dev-202609020818`, exit 0.
-- Native binary is real: 141 MB ELF linux-x64, runs correctly.
+Everything published at **1.1.0** on `latest` tag (Sep 2026):
+- **Launcher** `@vln.codes__/icode@1.1.0` → `bin/icode.js` resolves + spawns a
+  platform binary (esbuild-style `optionalDependencies` all `1.1.0`).
+- **All 6 platform binaries** `@vln.codes__/icode-{linux,darwin,windows}-{x64,arm64}@1.1.0`.
+- Built from the gate-enabled source with `OPENCODE_VERSION=1.1.0`, which bakes
+  `ICODE_CONTROL_URL=https://icode-s05p.onrender.com` into the binary.
+- Native smoke tests passed (`icode --version` → `1.1.0`).
 
-⚠️ **IMPORTANT:** that installed binary is a **dev build from BEFORE the
-trial/passcode gate**. It does NOT contain the gate or the updated
-`ICODE_CONTROL_URL` (`https://icode-s05p.onrender.com`). Users installing right
-now get old behavior.
+✓ **End-to-end gate verified against the PRODUCTION server** with the published
+binary: fresh machine → server starts the 21-day trial (expires +21d), local
+`passcode.json` stores `{passcode:"TRIAL"...}`, welcome banner prints remaining
+days, browser opens the access page, iCode/TUI launches.
+
+RELEASE RECIPE (for future bumps):
+1. `cd packages/opencode && OPENCODE_VERSION=<v> bun run script/build.ts`
+   (builds all 12 targets incl. musl/baseline; smoke test runs on the native one).
+   Gate is baked via `ICODE_CONTROL_URL` define in `script/build.ts:200`.
+2. `cd packages/icode && bun run script/package.ts --version=<v>` → assembles the
+   6 platform dirs under `packages/icode/npm/`.
+3. Bump `packages/icode/package.json` `version` + `optionalDependencies` to the
+   same `<v>`.
+4. Publish each of the 6 platform packages (`bun pm pack` + `npm publish
+   *.tgz --access public --tag latest`), then pack+publish the launcher
+   (use `npm pack`/`npm publish` for the launcher since `bun pm pack` chokes on
+   the workspace devDependency).
+   - Flaky uploads: set `npm config set fetch-retries 6`, or use `bun publish`
+     (worked for the stubborn tarball).
 
 ---
 
-## 6. NEXT STEP — repackage / release script (NOT done yet)
-Build a script that:
-1. Rebuilds the iCode binary **from the gate-enabled source** at
-   `/home/valentin/icode/icode` (gate edits in
-   `packages/opencode/src/passcode/client.ts` + `build.ts:200`).
-2. Republishes **all 6 platform packages** with a new version.
-3. Bumps the launcher's `optionalDependencies` (`packages/icode/package.json`) to
-   match, and bumps/publishes `@vln.codes__/icode` itself.
-
-Explored so far:
-- Launcher source: `packages/icode/` (package.json, `script/package.ts` = the
-  `package` npm script, `bin/icode.js` / `bin/icode.ts`).
-- `packages/opencode/script/publish.ts` and `build.ts` also exist.
-- Client repo is not a git repo; binary redistribution required for gate to reach
-  users.
+## 6. NEXT STEP — repackage / release script (DONE, see section 5)
 
 ---
 
 ## 7. Other things to remember
-- The exposed GitHub PAT should be **revoked/rotated**; further pushes from this
-  session need a fresh token or must be run from the user's machine.
-- Optional: web access page pay-link is currently a placeholder
-  (`https://forms.gle/48iUwJ2nCBU6uwQc8`) — may want the live Google Form URL.
+- A fresh GitHub PAT was supplied and stored in `~/.git-credentials` (chmod 600)
+  for this repo; the previously-exposed PAT is retired. Treat credentials as
+  sensitive; revoke if leaked.
+- Google Form in use: `https://forms.gle/48iUwJ2nCBU6uwQc8`. Do NOT create
+  another form — the link is baked into the published access page + CLI banners.
+- The `/home/valentin/icode/icode` repo also contains a **dev copy** of the
+  control server at `packages/icode-control/` (NOT the deployed one; deployed
+  copy is `/home/valentin/icode/icode-control-deploy`). Don't get them mixed up.
 - Shell-tool background processes hang: use self-contained `bash /tmp/*.sh`
-  scripts that `kill` their children before exiting.
+  scripts that `kill` their children before exiting (worked for flaky npm
+  publishes — run detached with `setsid nohup ... &`).
 - Read-only infrastructure constraints from AGENTS.md (dev branch default, etc.)
   apply to `/home/valentin/icode/icode`.
