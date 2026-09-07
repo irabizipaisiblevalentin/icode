@@ -206,15 +206,15 @@
     </header>
     <main class="access-main">
       <div class="access-box" id="access-box">
-        <div class="access-title">Murakaza neza kuri <span class="accent">iCode</span></div>
-        <div class="access-sub">Shyiramo Passcode yawe kugira ngo utangire gukoresha iCode.</div>
+        <div class="access-title">Welcome to <span class="accent">iCode</span></div>
+        <div class="access-sub">Enter the Passcode you received to start using iCode.</div>
 
         <input id="access-input" class="access-input" type="text" placeholder="ICODE-XXXX-XXXX" autocomplete="off" spellcheck="false" inputmode="text">
-        <button id="access-btn" class="access-btn">Komeza kuri iCode</button>
+        <button id="access-btn" class="access-btn">Continue to iCode</button>
 
         <div id="access-result" class="result-panel"></div>
 
-        <div class="divider">cyangwa</div>
+        <div class="divider">or</div>
 
         <div class="pay-section">
           <div class="pay-amount">
@@ -236,21 +236,21 @@
           </div>
 
           <div class="form-note">
-            <strong>Kwishyura byonyine ntibihagije.</strong><br>
-            Ugomba no kuzuza Google Form kugira ngo ubwishyu bwawe bugenzurwe kandi ubone Passcode.
+            <strong>Paying alone is not enough.</strong><br>
+            You must also fill in the Google Form so your payment can be verified and you get a Passcode.
           </div>
 
-          <a class="form-btn" href="https://forms.gle/48iUwJ2nCBU6uwQc8" target="_blank" rel="noopener">NISHYUYE — NUZUZA FORM</a>
-          <div class="form-btn-sub">Nyuma yo kwishyura, uzuzze form hanyuma utegereze Admin kugenzura.</div>
+          <a class="form-btn" href="https://forms.gle/48iUwJ2nCBU6uwQc8" target="_blank" rel="noopener">I PAID — FILL THE FORM</a>
+          <div class="form-btn-sub">After paying, fill in the form and wait for the Admin to verify.</div>
         </div>
 
-        <div class="divider">cyangwa</div>
+        <div class="divider">or</div>
 
         <div class="passcode-section">
-          <h3>Ufite Passcode?</h3>
-          <div class="passcode-sub">Andikamo Passcode wahawe na Admin.</div>
+          <h3>Have a Passcode?</h3>
+          <div class="passcode-sub">Type the Passcode given to you by Admin.</div>
           <input id="access-input-bottom" class="access-input" type="text" placeholder="ICODE-XXXX-XXXX" autocomplete="off" spellcheck="false" inputmode="text">
-          <button id="access-btn-bottom" class="access-btn">Komeza</button>
+          <button id="access-btn-bottom" class="access-btn">Continue</button>
         </div>
       </div>
     </main>
@@ -284,9 +284,9 @@
         <div class="stat"><div class="label">Expired Passcodes</div><div class="value" id="st-expired">-</div></div>
       </div>
       <div class="card">
-        <h2>Ubusabe bunyamakuru (Payment Requests)</h2>
+        <h2>Payment Requests</h2>
         <div class="search-row">
-          <input id="search" type="text" placeholder="Gushakisha: izina, telefoni, email, transaction...">
+          <input id="search" type="text" placeholder="Search: name, phone, email, transaction...">
           <div class="filters">
             <button data-filter="ALL" class="active">All</button>
             <button data-filter="PENDING">Pending</button>
@@ -303,14 +303,14 @@
             <tbody id="req-table"></tbody>
           </table>
         </div>
-        <div id="req-loading" class="empty">Yigendaje...</div>
+        <div id="req-loading" class="empty">Loading...</div>
       </div>
     </div>
 
     <!-- Payment Request detail modal -->
     <div id="detail-modal" class="overlay">
       <div class="modal" style="max-width:560px">
-        <h3>Reba ibisobanuro · Payment Request</h3>
+        <h3>Payment Request Details</h3>
         <div id="detail-body"></div>
         <div class="actions" id="detail-actions"></div>
       </div>
@@ -322,8 +322,8 @@
         <h3 id="confirm-title"></h3>
         <p id="confirm-text"></p>
         <div class="actions">
-          <button class="secondary" onclick="closeConfirm()">Kureka</button>
-          <button id="confirm-yes" onclick="runConfirm()">Kwemeza</button>
+          <button class="secondary" onclick="closeConfirm()">Cancel</button>
+          <button id="confirm-yes" onclick="runConfirm()">Confirm</button>
         </div>
       </div>
     </div>
@@ -332,16 +332,16 @@
     <div id="code-modal" class="overlay">
       <div class="modal">
         <h3>Payment Approved ✓</h3>
-        <p>Passcode generated successfully. Ihereza uyu muntu.</p>
+        <p>Passcode generated successfully. Send it to this person.</p>
         <div class="big-code" id="code-output"></div>
         <p style="text-align:center"><span class="copied" id="expiry-hint"></span></p>
-        <div class="actions"><button class="secondary" onclick="closeCodeModal()">Gusiga (Close)</button></div>
+        <div class="actions"><button class="secondary" onclick="closeCodeModal()">Close</button></div>
       </div>
     </div>
 
     <div id="tab-requests" class="hidden">
       <div class="card">
-        <h2>Imirimo yose (All Requests)</h2>
+        <h2>All Requests</h2>
         <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Search and manage all payment requests from the form.</p>
         <div id="requests-body"></div>
       </div>
@@ -362,7 +362,7 @@
             <tbody id="pc-table"></tbody>
           </table>
         </div>
-        <div id="pc-loading" class="empty">Yigendaje...</div>
+        <div id="pc-loading" class="empty">Loading...</div>
       </div>
     </div>
 
@@ -375,7 +375,7 @@
             <tbody id="audit-table"></tbody>
           </table>
         </div>
-        <div id="audit-loading" class="empty">Yigendaje...</div>
+        <div id="audit-loading" class="empty">Loading...</div>
       </div>
     </div>
 
@@ -395,7 +395,7 @@
             <tbody id="trl-table"></tbody>
           </table>
         </div>
-        <div id="trl-loading" class="empty">Yigendaje...</div>
+        <div id="trl-loading" class="empty">Loading...</div>
       </div>
     </div>
 
@@ -476,28 +476,28 @@
         const now = new Date()
         const remainingMs = expires ? expires.getTime() - now.getTime() : 0
         const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)))
-        const expiresStr = expires ? expires.toLocaleDateString('rw-RW', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
+        const expiresStr = expires ? expires.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
 
         box.innerHTML = `
-          <div class="trial-success">
+<div class="trial-success">
             <div class="trial-icon">🎉</div>
-            <h2>Murakaza neza kuri <span style="color:var(--accent)">iCode</span>!</h2>
-            <div class="trial-sub">Ufite igihe cy'igerageza cy'ibyumweru 3.</div>
+            <h2>Welcome to <span style="color:var(--accent)">iCode</span>!</h2>
+            <div class="trial-sub">You have a free 3-week trial.</div>
 
             <div class="trial-countdown">
               <div class="count-item">
                 <div class="count-num" id="trial-days">${remainingDays}</div>
-                <div class="count-lbl">Iminsi</div>
+                <div class="count-lbl">Days</div>
               </div>
             </div>
 
             <div class="trial-expiry-date">
-              Igihe cy'igerageza kirarangiye: <strong>${expiresStr}</strong>
+              Trial ends: <strong>${expiresStr}</strong>
             </div>
 
             <div style="margin-top:20px;color:var(--muted);font-size:14px;line-height:1.5">
-              Ubu ushobora gukoresha iCode ku buntu mu gihe cy'iminsi ${remainingDays}.
-              <br>Nyuma y'iyi trial, ugomba kwishyura <strong style="color:var(--accent)">1,000 RWF</strong> kugira ngo ukomeze.
+              You can now use iCode free for ${remainingDays} days.
+              <br>After this trial, you must pay <strong style="color:var(--accent)">1,000 RWF</strong> to continue.
             </div>
           </div>
 
@@ -519,26 +519,26 @@
               </div>
             </div>
             <div class="form-note">
-              <strong>Kwishyura byonyine ntibihagije.</strong><br>
-              Ugomba no kuzuza Google Form kugira ngo ubwishyu bwawe bugenzurwe kandi ubone Passcode.
+              <strong>Paying alone is not enough.</strong><br>
+              You must also fill in the Google Form so your payment can be verified and you get a Passcode.
             </div>
-            <a class="form-btn" href="https://forms.gle/48iUwJ2nCBU6uwQc8" target="_blank" rel="noopener">NISHYUYE — NUZUZA FORM</a>
-            <div class="form-btn-sub">Nyuma yo kwishyura, uzuzze form hanyuma utegereze Admin kugenzura.</div>
+            <a class="form-btn" href="https://forms.gle/48iUwJ2nCBU6uwQc8" target="_blank" rel="noopener">I PAID — FILL THE FORM</a>
+            <div class="form-btn-sub">After paying, fill in the form and wait for the Admin to verify.</div>
           </div>
 
-          <div class="divider">cyangwa</div>
+          <div class="divider">or</div>
 
           <div class="passcode-section">
-            <h3>Ufite Passcode?</h3>
-            <div class="passcode-sub">Andikamo Passcode wahawe na Admin.</div>
+            <h3>Have a Passcode?</h3>
+            <div class="passcode-sub">Type the Passcode given to you by Admin.</div>
             <input id="access-input" class="access-input" type="text" placeholder="ICODE-XXXX-XXXX" autocomplete="off" spellcheck="false" inputmode="text">
-            <button id="access-btn" class="access-btn">Komeza</button>
+            <button id="access-btn" class="access-btn">Continue</button>
             <div id="access-result" class="result-panel" style="margin-top:10px"></div>
           </div>
 
           <div style="text-align:center;margin-top:24px">
             <div style="color:var(--muted);font-size:13px">
-              Subira kuri Terminal maze wongere ukoreshe: <code style="color:var(--accent)">icode</code>
+              Return to the Terminal and run again: <code style="color:var(--accent)">icode</code>
             </div>
           </div>
         `
@@ -571,9 +571,9 @@
       }
 
       async function doActivate(code, resultEl, btnEl) {
-        if (!code) { showResult('Andika Passcode yawe.', 'error', resultEl); return }
+        if (!code) { showResult('Enter your Passcode.', 'error', resultEl); return }
         btnEl.disabled = true
-        btnEl.textContent = 'Bikorera...'
+        btnEl.textContent = 'Working...'
         resultEl.className = 'result-panel'
         try {
           // In wait mode we bind the code straight to the machine the CLI is
@@ -595,17 +595,17 @@
           if (data.ok) {
             localStorage.setItem('icode_passcode', code)
             const back = waitMachine
-              ? '<br><span style="font-size:13px">Subira kuri Terminal maze wongere ukoreshe: <code style="color:var(--accent)">icode</code></span>'
-              : '<br><span style="font-size:13px">Ubu ushobora gukoresha iCode.</span>'
-            showResult(`<strong>✓ Passcode yemejwe neza!</strong><br>Murakoze!${back}`, 'success', resultEl)
+              ? '<br><span style="font-size:13px">Return to the Terminal and run again: <code style="color:var(--accent)">icode</code></span>'
+              : '<br><span style="font-size:13px">You can now use iCode.</span>'
+            showResult(`<strong>✓ Passcode verified successfully!</strong><br>Thank you!${back}`, 'success', resultEl)
           } else if (data.rate_limited) {
-            showResult('Ugerageje kenshi. Gerageza nyuma y\'akanya kato.', 'info', resultEl)
+            showResult('Too many attempts. Try again in a moment.', 'info', resultEl)
           } else if (data.reason === 'blocked') {
-            showResult('Uburenganzira bwo gukoresha iCode kuri iyi Passcode bwahagaritswe.<br><span style="font-size:13px">Nyamuneka hamagara ushinzwe iCode.</span>', 'error', resultEl)
+            showResult('Your access to iCode with this Passcode has been revoked.<br><span style="font-size:13px">Please contact the iCode admin.</span>', 'error', resultEl)
           } else if (data.reason === 'expired') {
-            showResult('Passcode yawe yararangiye.<br><span style="font-size:13px">Kwishyura 1,000 RWF hanyuma uzuze Google Form kugira ngo ubone Passcode.</span>', 'info', resultEl)
+            showResult('Your Passcode has expired.<br><span style="font-size:13px">Pay 1,000 RWF and fill in the Google Form to get a new Passcode.</span>', 'info', resultEl)
           } else {
-            showResult('Passcode siyo.<br><span style="font-size:13px">Reba neza Passcode wahawe na Admin hanyuma wongere ugerageze.</span>', 'error', resultEl)
+            showResult('Wrong Passcode.<br><span style="font-size:13px">Check the Passcode Admin gave you and try again.</span>', 'error', resultEl)
           }
         } catch (e) {
           showResult('Netiike ntikora. Gerageza nyuma.', 'error', resultEl)
@@ -748,7 +748,7 @@
       const loading = document.getElementById('req-loading')
       if (!list.length) {
         tbody.innerHTML = ''
-        loading.textContent = 'Nta busabe. (No requests yet)'
+        loading.textContent = 'No requests yet'
         loading.style.display = 'block'
         return
       }
@@ -808,17 +808,17 @@
         <p style="color:var(--muted)">Payment Date: <strong style="color:#fff">${escapeHtml(r.payment_date || '-')}</strong></p>
         <p style="color:var(--muted)">Payment Time: <strong style="color:#fff">${escapeHtml(r.payment_time || '-')}</strong></p>
         ${r.payment_proof ? `<h4 style="margin:12px 0 6px;color:var(--accent)">Payment Proof</h4><p style="color:var(--muted)">${escapeHtml(r.payment_proof)}</p>
-          <p><button class="secondary" onclick="window.open('${escapeHtml(r.payment_proof)}','_blank')">Reba proof (View)</button></p>` : ''}
+          <p><button class="secondary" onclick="window.open('${escapeHtml(r.payment_proof)}','_blank')">View proof</button></p>` : ''}
         <h4 style="margin:12px 0 6px;color:var(--accent)">Submission</h4>
         <p style="color:var(--muted)">Status: ${statusBadge(r.status)}</p>
-        ${r.is_duplicate ? '<p style="color:var(--warn);margin-top:8px">⚠ Possible Duplicate Payment. Iyi transaction reference yahise yoherezwa.</p>' : ''}
+        ${r.is_duplicate ? '<p style="color:var(--warn);margin-top:8px">⚠ Possible Duplicate Payment. This transaction reference was already submitted.</p>' : ''}
         ${r.admin_note ? `<p style="color:var(--muted)">Admin note: <strong style="color:#fff">${escapeHtml(r.admin_note)}</strong></p>` : ''}
       `
       document.getElementById('detail-actions').innerHTML = r.status === 'PENDING' ? `
-        <button onclick="closeDetail();promptApprove('${r.id}')">Kwemeza ubwishyu</button>
-        <button class="danger" onclick="closeDetail();promptReject('${r.id}')">Kwanga</button>
-        <button class="secondary" onclick="closeDetail()">Subira inyuma</button>
-      ` : `<button class="secondary" onclick="closeDetail()">Subira inyuma</button>`
+        <button onclick="closeDetail();promptApprove('${r.id}')">Approve payment</button>
+        <button class="danger" onclick="closeDetail();promptReject('${r.id}')">Reject</button>
+        <button class="secondary" onclick="closeDetail()">Back</button>
+      ` : `<button class="secondary" onclick="closeDetail()">Back</button>`
       modal.classList.add('show')
     }
     function closeDetail() { document.getElementById('detail-modal').classList.remove('show') }
@@ -827,17 +827,17 @@
     // ----- Confirmation -----
     let confirmAction = null
     function promptApprove(id) {
-      document.getElementById('confirm-title').textContent = 'Emeza ko wishyuwe?'
-      document.getElementById('confirm-text').textContent = 'Uyu ukoresha yatanze ubwishyu bwa 1,000 RWF.'
-      document.getElementById('confirm-yes').textContent = 'Kwemeza'
+      document.getElementById('confirm-title').textContent = 'Confirm that this user paid?'
+      document.getElementById('confirm-text').textContent = 'This user submitted a payment of 1,000 RWF.'
+      document.getElementById('confirm-yes').textContent = 'Confirm'
       document.getElementById('confirm-yes').className = ''
       confirmAction = () => runApprove(id)
       document.getElementById('confirm-modal').classList.add('show')
     }
     function promptReject(id) {
-      document.getElementById('confirm-title').textContent = 'Kwanga ubu busabe?'
-      document.getElementById('confirm-text').textContent = 'Uribwa ko ubwishyu budahuye? Ibi ntibizahita bitandika passcode.'
-      document.getElementById('confirm-yes').textContent = 'Kwanga'
+      document.getElementById('confirm-title').textContent = 'Reject this request?'
+      document.getElementById('confirm-text').textContent = 'Was the payment not correct? No passcode will be issued for this request.'
+      document.getElementById('confirm-yes').textContent = 'Reject'
       document.getElementById('confirm-yes').className = 'danger'
       confirmAction = () => runReject(id)
       document.getElementById('confirm-modal').classList.add('show')
@@ -870,7 +870,7 @@
     async function runReject(id) {
       try {
         await api(`/v1/admin/payment-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ adminNote: 'Rejected by admin' }) })
-        toast('Ubusabe bwanzwe (rejected)', 'warn')
+        toast('Request rejected', 'warn')
         await loadRequests(true)
       } catch(e) {}
     }
@@ -885,7 +885,7 @@
         document.getElementById('pc-active').textContent = allPasscodes.filter(p => !p.blocked && new Date(p.expires_at) > new Date()).length
         document.getElementById('pc-blocked').textContent = allPasscodes.filter(p => p.blocked).length
         if (!allPasscodes.length) {
-          tbody.innerHTML = ''; loading.style.display = 'block'; loading.textContent = 'Nta passcode ihari (No passcodes).'; return
+          tbody.innerHTML = ''; loading.style.display = 'block'; loading.textContent = 'No passcodes'; return
         }
         loading.style.display = 'none'
         const now = new Date()
@@ -919,7 +919,7 @@
         document.getElementById('trl-active').textContent = withStatus.filter(t => !t.expired).length
         document.getElementById('trl-expired').textContent = withStatus.filter(t => t.expired).length
         if (!trials.length) {
-          tbody.innerHTML = ''; loading.style.display = 'block'; loading.textContent = 'Nta trial ihari (No trials yet).'; return
+          tbody.innerHTML = ''; loading.style.display = 'block'; loading.textContent = 'No trials yet'; return
         }
         loading.style.display = 'none'
         tbody.innerHTML = withStatus.map(t => {
@@ -936,14 +936,14 @@
     }
 
     function promptRevoke(id) {
-      document.getElementById('confirm-title').textContent = 'Hagarika ubu burenganzira?'
-      document.getElementById('confirm-text').textContent = 'Passcode irahagarikwa. Ukoresha ntazongera gukoresha iCode no kuri iyi passcode.'
-      document.getElementById('confirm-yes').textContent = 'Hagarika'
+      document.getElementById('confirm-title').textContent = 'Revoke this access?'
+      document.getElementById('confirm-text').textContent = 'This Passcode will be revoked. The user will no longer be able to use iCode with it.'
+      document.getElementById('confirm-yes').textContent = 'Revoke'
       document.getElementById('confirm-yes').className = 'danger'
       confirmAction = async () => {
         try {
           await api(`/v1/admin/passcodes/${id}/revoke`, { method: 'POST' })
-          toast('Passcode yahagaritswe (revoked)', 'warn'); loadPasscodes()
+          toast('Passcode revoked', 'warn'); loadPasscodes()
         } catch(e) {}
       }
       document.getElementById('confirm-modal').classList.add('show')
@@ -951,7 +951,7 @@
     async function reactivatePass(id) {
       try {
         await api(`/v1/admin/passcodes/${id}/reactivate`, { method: 'POST' })
-        toast('Passcode yongeye gukora (reactivated)', 'success'); loadPasscodes()
+        toast('Passcode reactivated', 'success'); loadPasscodes()
       } catch(e) {}
     }
 
@@ -962,7 +962,7 @@
         auditEntries = data.entries || []
         const tbody = document.getElementById('audit-table')
         const loading = document.getElementById('audit-loading')
-        if (!auditEntries.length) { tbody.innerHTML = ''; loading.style.display='block'; loading.textContent='Nta ibyabaye (No log entries).'; return }
+        if (!auditEntries.length) { tbody.innerHTML = ''; loading.style.display='block'; loading.textContent='No log entries'; return }
         loading.style.display = 'none'
         tbody.innerHTML = auditEntries.map(e => `
           <tr><td>${new Date(e.timestamp).toLocaleString()}</td>

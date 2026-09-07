@@ -34,13 +34,13 @@ export async function sendPasscodeNotification(msg: NotificationMessage): Promis
       headers,
       body: JSON.stringify({
         // Provides a ready-to-place message you can format on the receiving side.
-        subject: "iCode Passcode — Murakaza neza!",
+        subject: "iCode Passcode — Welcome!",
         message: [
-          "Murakaza neza kuri iCode!",
-          "Ubwishyu bwawe bwa 1,000 RWF bwemejwe.",
-          `Passcode yawe: ${msg.passcode}`,
-          "Koresha iyi Passcode kugira ngo utangire gukoresha iCode.",
-          `Itangirira: ${msg.expiresAt}`,
+          "Welcome to iCode!",
+          "Your payment of 1,000 RWF has been verified.",
+          `Your Passcode: ${msg.passcode}`,
+          "Use this Passcode to start using iCode.",
+          `Expires on: ${msg.expiresAt}`,
           "",
           "— iCode",
           "Irabizi Paisible Valentin",

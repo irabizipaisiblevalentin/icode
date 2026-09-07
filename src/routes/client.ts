@@ -42,21 +42,21 @@ export function validate(req: ValidateRequest): ValidateResponse {
       reason: "rate_limited",
       rate_limited: true,
       retry_after_seconds: limiter.retryAfterSeconds,
-      message: "Ugerageje kenshi. Gerageza nyuma y'akanya kato.",
+      message: "Too many attempts. Please try again in a moment.",
     }
   }
   const passcode = findPasscodeByCode(req.code)
   if (!passcode) {
-    return { ok: false, reason: "not_found", message: "Passcode siyo. Reba neza Passcode wahawe na Admin hanyuma wongere ugerageze." }
+    return { ok: false, reason: "not_found", message: "That Passcode does not exist. Check the Passcode you were given and try again." }
   }
   if (passcode.blocked) {
-    return { ok: false, reason: "blocked", message: "Uburenganzira bwo gukoresha iCode kuri iyi Passcode bwahagaritswe. Nyamuneka hamagara Admin wa iCode." }
+    return { ok: false, reason: "blocked", message: "Your access to iCode with this Passcode has been revoked. Please contact the iCode admin." }
   }
   if (new Date(passcode.expires_at) < new Date()) {
-    return { ok: false, reason: "expired", message: "Passcode yawe yararangiye. Kwishyura 1,000 RWF hanyuma uzuze Google Form kugira ngo ubone Passcode.." }
+    return { ok: false, reason: "expired", message: "Your Passcode has expired. Pay 1,000 RWF and fill in the Google Form to get a new Passcode." }
   }
   if (passcode.max_uses !== null && passcode.current_uses >= passcode.max_uses) {
-    return { ok: false, reason: "max_uses", message: "Iyi passcode yageze ku mubare wayo ntarengwa w'ukuyikoresha." }
+    return { ok: false, reason: "max_uses", message: "This Passcode has reached its maximum allowed uses." }
   }
 
   incrementPasscodeUse(passcode.id)
@@ -70,7 +70,7 @@ export function validate(req: ValidateRequest): ValidateResponse {
 
   return {
     ok: true,
-    message: "Passcode yakiriwe.",
+    message: "Passcode accepted.",
     passcode_id: passcode.id,
     expires_at: passcode.expires_at,
     type: passcode.type,
@@ -93,10 +93,10 @@ export interface HeartbeatResponse {
 export function heartbeat(req: HeartbeatRequest): HeartbeatResponse {
   const install = getInstallByMachine(req.machine_id)
   if (!install) {
-    return { ok: false, message: "Uyu muyoboro ntwarandikishwa." }
+    return { ok: false, message: "This device is not registered." }
   }
   if (install.blocked) {
-    return { ok: false, blocked: true, message: "Uburenganzira bwo gukoresha iCode bwahagaritswe." }
+    return { ok: false, blocked: true, message: "Your access to iCode has been revoked." }
   }
 
   const now = new Date()
@@ -129,21 +129,21 @@ export interface StatusResponse {
 export function status(req: StatusRequest): StatusResponse {
   const install = getInstallByMachine(req.machine_id)
   if (!install) {
-    return { ok: false, message: "Uyu muyoboro ntwarandikishwa." }
+    return { ok: false, message: "This device is not registered." }
   }
   if (install.blocked) {
-    return { ok: false, blocked: true, access_revoked: true, message: "Uburenganzira bwo gukoresha iCode bwahagaritswe. Nyamuneka hamagara Admin wa iCode." }
+    return { ok: false, blocked: true, access_revoked: true, message: "Your access to iCode has been revoked. Please contact the iCode admin." }
   }
 
   const passcode = install.passcode_id ? getPasscode(install.passcode_id) : null
   if (!passcode) {
-    return { ok: false, passcode_valid: false, message: "Nta passcode ihujwe n'uyu muyoboro." }
+    return { ok: false, passcode_valid: false, message: "No passcode is linked to this device." }
   }
 
   const now = new Date()
   const blockReason =
-    passcode.blocked ? "Uburenganzira bwo gukoresha iCode bwahagaritswe. Nyamuneka hamagara Admin wa iCode."
-    : new Date(passcode.expires_at) < now ? "Igihe cy'igerageza cyarangiye. Kugira ngo ukomeze gukoresha iCode, ugomba kwishyura 1,000 RWF no kubona Passcode."
+    passcode.blocked ? "Your access to iCode has been revoked. Please contact the iCode admin."
+    : new Date(passcode.expires_at) < now ? "Your trial has ended. To keep using iCode you must pay 1,000 RWF and get a Passcode."
     : null
   if (blockReason) {
     return {
@@ -205,8 +205,8 @@ export function trial(req: TrialRequest): TrialResponse {
     expires_at: expiresAt,
     remaining_days: active ? remainingDays : 0,
     message: active
-      ? "Trial yakomeje."
-      : "Trial yararangiye. Nyamuneka wizihishe kugira ngo ukomeze gukoresha iCode.",
+      ? "Trial is active."
+      : "Your trial has ended. Please pay to continue using iCode.",
   }
 }
 
@@ -231,15 +231,15 @@ export interface ActivateResponse {
 
 export function activateByCode(req: ActivateRequest): ActivateResponse {
   const code = (req.code ?? "").trim().toUpperCase()
-  if (!code) return { ok: false, reason: "invalid", message: "Passcode ntigomba kuba ubusa." }
-  if (!req.machine_id) return { ok: false, reason: "invalid", message: "machine_id ntibonetse." }
+  if (!code) return { ok: false, reason: "invalid", message: "Passcode must not be empty." }
+  if (!req.machine_id) return { ok: false, reason: "invalid", message: "machine_id is missing." }
 
   const passcode = findPasscodeByCode(code)
-  if (!passcode) return { ok: false, reason: "not_found", message: "Passcode ntabwo iboneka." }
-  if (passcode.blocked) return { ok: false, reason: "blocked", message: "Iyi passcode yarahagaritswe." }
-  if (new Date(passcode.expires_at) < new Date()) return { ok: false, reason: "expired", message: "Iyi passcode yarashize." }
+  if (!passcode) return { ok: false, reason: "not_found", message: "That Passcode does not exist." }
+  if (passcode.blocked) return { ok: false, reason: "blocked", message: "This Passcode has been revoked." }
+  if (new Date(passcode.expires_at) < new Date()) return { ok: false, reason: "expired", message: "This Passcode has expired." }
   if (passcode.max_uses !== null && passcode.current_uses >= passcode.max_uses) {
-    return { ok: false, reason: "max_uses", message: "Iyi passcode yageze ku mubare ntarengwa w'ukuyikoresha." }
+    return { ok: false, reason: "max_uses", message: "This Passcode has reached its maximum allowed uses." }
   }
 
   incrementPasscodeUse(passcode.id)
@@ -253,7 +253,7 @@ export function activateByCode(req: ActivateRequest): ActivateResponse {
 
   return {
     ok: true,
-    message: "Passcode yakiriwe. Ubu ushobora gusubira muri terminal.",
+    message: "Passcode accepted. You can now return to the terminal.",
     passcode_id: passcode.id,
     expires_at: passcode.expires_at,
     type: passcode.type,
