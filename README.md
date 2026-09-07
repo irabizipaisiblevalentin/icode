@@ -1,6 +1,6 @@
 # iCode Control Server
 
-Access-control server for **iCode** — a Kinyarwanda-first coding agent by **Irabizi Paisible Valentin**.
+Access-control server for **iCode** — an English-first coding agent by **Irabizi Paisible Valentin**.
 
 Gates access behind a paid license: users pay **1,000 RWF**, submit the access
 form, an admin verifies the payment, and the system issues a unique passcode
@@ -11,7 +11,7 @@ form, an admin verifies the payment, and the system issues a unique passcode
 - **Bun** + **`bun:sqlite`** — zero runtime npm dependencies
 - Single-file SQLite DB (`icode-control.db`)
 - Single-page web UI serving both:
-  - `/` — user access page (passcode entry, Kinyarwanda messages, payment details)
+  - `/` — user access page (passcode entry, payment details)
   - `/admin` — admin dashboard (stats, payment requests, passcodes, audit log)
 
 ## Quick start

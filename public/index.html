@@ -608,10 +608,10 @@
             showResult('Wrong Passcode.<br><span style="font-size:13px">Check the Passcode Admin gave you and try again.</span>', 'error', resultEl)
           }
         } catch (e) {
-          showResult('Netiike ntikora. Gerageza nyuma.', 'error', resultEl)
+          showResult('Network error. Please try again later.', 'error', resultEl)
         }
         btnEl.disabled = false
-        btnEl.textContent = 'Komeza'
+        btnEl.textContent = 'Continue'
       }
 
       async function submit() {
@@ -656,11 +656,11 @@
         // Credentials changed on the server: drop the cached token and ask again.
         localStorage.removeItem('admin_token')
         TOKEN = ''
-        toast('Token yawe ntikibaho. Ongera uyinjize.', 'error')
+        toast('Your token is no longer valid. Please re-enter it.', 'error')
         ensureToken()
         if (TOKEN) {
           const retry = await fetch(`${API}${path}`, { headers: headers(), ...opts })
-          if (retry.status === 401) { toast('Token ntiyemewe', 'error'); throw new Error('unauthorized') }
+          if (retry.status === 401) { toast('Token not accepted', 'error'); throw new Error('unauthorized') }
           const data = await retry.json()
           if (!retry.ok && !opts.dontThrow) { toast(data.error || 'Error', 'error'); throw new Error(data.error || 'error') }
           return data
