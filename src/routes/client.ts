@@ -4,7 +4,7 @@ import {
   getPasscode,
   incrementPasscodeUse,
   upsertInstall,
-  getInstallByMachine,
+  getInstallByMachineOrHardware,
   activateInstallByCode,
   startTrial,
   addUsage,
@@ -16,6 +16,7 @@ import { hitRateLimit } from "../rate-limit"
 export interface ValidateRequest {
   code: string
   machine_id: string
+  hardware_id?: string
   platform: string
   arch: string
   version?: string
@@ -62,6 +63,7 @@ export function validate(req: ValidateRequest): ValidateResponse {
   incrementPasscodeUse(passcode.id)
   upsertInstall({
     machine_id: req.machine_id,
+    hardware_id: req.hardware_id,
     platform: req.platform,
     arch: req.arch,
     version: req.version,
@@ -79,6 +81,7 @@ export function validate(req: ValidateRequest): ValidateResponse {
 
 export interface HeartbeatRequest {
   machine_id: string
+  hardware_id?: string
   seconds_active: number
 }
 
@@ -91,7 +94,7 @@ export interface HeartbeatResponse {
 }
 
 export function heartbeat(req: HeartbeatRequest): HeartbeatResponse {
-  const install = getInstallByMachine(req.machine_id)
+  const install = getInstallByMachineOrHardware(req.machine_id, req.hardware_id)
   if (!install) {
     return { ok: false, message: "This device is not registered." }
   }
@@ -111,6 +114,7 @@ export function heartbeat(req: HeartbeatRequest): HeartbeatResponse {
 
 export interface StatusRequest {
   machine_id: string
+  hardware_id?: string
 }
 
 export interface StatusResponse {
@@ -127,7 +131,7 @@ export interface StatusResponse {
 }
 
 export function status(req: StatusRequest): StatusResponse {
-  const install = getInstallByMachine(req.machine_id)
+  const install = getInstallByMachineOrHardware(req.machine_id, req.hardware_id)
   if (!install) {
     return { ok: false, message: "This device is not registered." }
   }
@@ -169,6 +173,7 @@ export function status(req: StatusRequest): StatusResponse {
 
 export interface TrialRequest {
   machine_id: string
+  hardware_id?: string
   platform: string
   arch: string
   version?: string
@@ -188,6 +193,7 @@ export interface TrialResponse {
 export function trial(req: TrialRequest): TrialResponse {
   const result = startTrial({
     machine_id: req.machine_id,
+    hardware_id: req.hardware_id,
     platform: req.platform,
     arch: req.arch,
     version: req.version,
@@ -214,6 +220,7 @@ export function trial(req: TrialRequest): TrialResponse {
 
 export interface ActivateRequest {
   machine_id: string
+  hardware_id?: string
   platform: string
   arch: string
   version?: string
@@ -245,6 +252,7 @@ export function activateByCode(req: ActivateRequest): ActivateResponse {
   incrementPasscodeUse(passcode.id)
   activateInstallByCode({
     machine_id: req.machine_id,
+    hardware_id: req.hardware_id,
     platform: req.platform,
     arch: req.arch,
     version: req.version,

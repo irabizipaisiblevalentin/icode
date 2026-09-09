@@ -154,6 +154,10 @@ function init(db: Database) {
   if (!installCols.some((c) => c.name === "trial_started_at")) {
     db.run(`ALTER TABLE installs ADD COLUMN trial_started_at TEXT`)
   }
+  if (!installCols.some((c) => c.name === "hardware_id")) {
+    db.run(`ALTER TABLE installs ADD COLUMN hardware_id TEXT`)
+  }
+  db.run(`CREATE INDEX IF NOT EXISTS idx_installs_hardware ON installs(hardware_id)`)
 }
 
 // ─── Passcodes ────────────────────────────────────────────────────────
@@ -297,6 +301,7 @@ export function deleteCustomer(id: string) {
 export interface InstallRow {
   id: string
   machine_id: string
+  hardware_id: string | null
   platform: string
   arch: string
   version: string | null
@@ -310,6 +315,7 @@ export interface InstallRow {
 
 export function upsertInstall(opts: {
   machine_id: string
+  hardware_id?: string
   platform: string
   arch: string
   version?: string
@@ -317,23 +323,59 @@ export function upsertInstall(opts: {
 }): InstallRow {
   const d = db()
   const existing = d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(opts.machine_id)
-  if (existing) {
+
+  // The machine_id is new (often after a reinstall wiped the state folder), but
+  // the same PC may already be known by its hardware fingerprint. In that case
+  // adopt the existing install (keeping its trial/passcode/history) instead of
+  // creating a duplicate that could restart the free trial.
+  const knownByHardware =
+    !existing && opts.hardware_id
+      ? d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE hardware_id = ?`).get(opts.hardware_id)
+      : null
+
+  if (existing || knownByHardware) {
+    const row = existing ?? knownByHardware!
+    const hardwareId = opts.hardware_id || row.hardware_id
     d.run(
-      `UPDATE installs SET platform = ?, arch = ?, version = ?, passcode_id = ?, last_seen_at = datetime('now') WHERE machine_id = ?`,
-      [opts.platform, opts.arch, opts.version ?? existing.version, opts.passcode_id ?? existing.passcode_id, opts.machine_id],
+      `UPDATE installs SET machine_id = ?, hardware_id = ?, platform = ?, arch = ?, version = ?, passcode_id = ?, last_seen_at = datetime('now') WHERE id = ?`,
+      [
+        opts.machine_id,
+        hardwareId,
+        opts.platform,
+        opts.arch,
+        opts.version ?? row.version,
+        opts.passcode_id ?? row.passcode_id,
+        row.id,
+      ],
     )
-    return d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(opts.machine_id)!
+    return d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE id = ?`).get(row.id)!
   }
+
   const id = randomUUID()
   d.run(
-    `INSERT INTO installs (id, machine_id, platform, arch, version, passcode_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, opts.machine_id, opts.platform, opts.arch, opts.version ?? null, opts.passcode_id ?? null],
+    `INSERT INTO installs (id, machine_id, hardware_id, platform, arch, version, passcode_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, opts.machine_id, opts.hardware_id ?? null, opts.platform, opts.arch, opts.version ?? null, opts.passcode_id ?? null],
   )
   return d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE id = ?`).get(id)!
 }
 
+export function getInstallByHardware(hardwareId: string): InstallRow | null {
+  return db().query<InstallRow, [string]>(`SELECT * FROM installs WHERE hardware_id = ?`).get(hardwareId) ?? null
+}
+
 export function getInstallByMachine(machineId: string): InstallRow | null {
   return db().query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(machineId) ?? null
+}
+
+export function getInstallByMachineOrHardware(machineId: string, hardwareId?: string | null): InstallRow | null {
+  const d = db()
+  const byMachine = d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(machineId)
+  if (byMachine) return byMachine
+  if (hardwareId) {
+    const byHardware = d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE hardware_id = ?`).get(hardwareId)
+    if (byHardware) return byHardware
+  }
+  return null
 }
 
 export function listInstalls(): InstallRow[] {
@@ -387,17 +429,19 @@ export interface TrialResult {
 }
 
 // Grants a one-time free trial per machine. A trial is issued only once per
-// machine_id; repeat calls return the existing trial (so it cannot be restarted).
+// hardware; repeat calls (or reinstalls under a new machine_id) return the
+// existing trial (so it cannot be restarted or extended by reinstalling).
 export function startTrial(opts: {
   machine_id: string
+  hardware_id?: string
   platform: string
   arch: string
   version?: string
 }): TrialResult {
   const d = db()
-  let install = d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(opts.machine_id)
+  const install = upsertInstall(opts)
 
-  if (install?.trial_started_at) {
+  if (install.trial_started_at) {
     return {
       install,
       passcode: install.passcode_id ? getPasscode(install.passcode_id) : null,
@@ -406,14 +450,6 @@ export function startTrial(opts: {
     }
   }
 
-  if (!install) {
-    install = upsertInstall({
-      machine_id: opts.machine_id,
-      platform: opts.platform,
-      arch: opts.arch,
-      version: opts.version,
-    })
-  }
   d.run(`UPDATE installs SET trial_started_at = datetime('now') WHERE id = ?`, [install.id])
 
   const expires = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
@@ -433,24 +469,15 @@ export function startTrial(opts: {
 // CLI waiting on /v1/install/status can see the activation take effect.
 export function activateInstallByCode(opts: {
   machine_id: string
+  hardware_id?: string
   platform: string
   arch: string
   version?: string
   passcode_id: string
 }): InstallRow {
-  const existing = getInstallByMachine(opts.machine_id)
-  if (existing) {
-    db().run(`UPDATE installs SET passcode_id = ?, platform = ?, arch = ?, version = ?, last_seen_at = datetime('now') WHERE machine_id = ?`, [
-      opts.passcode_id,
-      opts.platform,
-      opts.arch,
-      opts.version ?? existing.version,
-      opts.machine_id,
-    ])
-    return getInstallByMachine(opts.machine_id)!
-  }
   return upsertInstall({
     machine_id: opts.machine_id,
+    hardware_id: opts.hardware_id,
     platform: opts.platform,
     arch: opts.arch,
     version: opts.version,
