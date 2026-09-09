@@ -42,6 +42,34 @@ import { sendTrialExpiryNotification } from "./notify"
 
 const PORT = parseInt(process.env.PORT ?? "4097")
 const DASHBOARD_PATH = new URL("../public/index.html", import.meta.url).pathname
+const WWW_INDEX_PATH = new URL("../www/index.html", import.meta.url).pathname
+
+const MIME: Record<string, string> = {
+  html: "text/html; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  mjs: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  json: "application/json",
+  svg: "image/svg+xml",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  ico: "image/x-icon",
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  txt: "text/plain; charset=utf-8",
+  webmanifest: "application/manifest+json",
+  map: "application/json",
+}
+
+function mimeFor(p: string): string {
+  const ext = p.split(".").pop()?.toLowerCase() ?? ""
+  return MIME[ext] ?? "application/octet-stream"
+}
 
 function corsHeaders(): HeadersInit {
   return {
@@ -134,7 +162,7 @@ const server = Bun.serve({
 
     // ── Web UI (access page + admin dashboard SPA) ────────────────────
 
-    if (path === "/" || path === "/access" || path === "/admin" || path === "/admin/") {
+    if (path === "/access" || path === "/admin" || path === "/admin/") {
       return new Response(Bun.file(DASHBOARD_PATH), {
         headers: { "Content-Type": "text/html" },
       })
@@ -268,7 +296,22 @@ const server = Bun.serve({
       return json({ error: "Not found" }, 404)
     }
 
-    return json({ error: "Not found" }, 404)
+    // ── Marketing website (root + SPA routes, served from www/) ───────
+
+    const clean = path.replace(/^\/+/, "")
+    if (clean !== "" && /\.\w+$/.test(clean)) {
+      const asset = new URL("../www/" + clean, import.meta.url).pathname
+      if (await Bun.file(asset).exists()) {
+        return new Response(Bun.file(asset), {
+          headers: { "Content-Type": mimeFor(clean) },
+        })
+      }
+      return json({ error: "Not found" }, 404)
+    }
+
+    return new Response(Bun.file(WWW_INDEX_PATH), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    })
   },
 })
 

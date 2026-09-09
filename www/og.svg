@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="rgba(61,216,186,0.20)"/>
+      <stop offset="1" stop-color="rgba(61,216,186,0)"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#08080a"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <g opacity="0.5" stroke="rgba(255,255,255,0.05)">
+    <path d="M0 126 H1200 M0 252 H1200 M0 378 H1200 M0 504 H1200"/>
+  </g>
+  <image href="./logo-white.png" x="270" y="168" width="660" height="163" preserveAspectRatio="xMidYMid meet"/>
+  <text x="600" y="430" text-anchor="middle" font-family="-apple-system, Segoe UI, Roboto, Arial, sans-serif" font-weight="500" font-size="34" fill="#9d9dab" letter-spacing="1">Your AI coding agent.</text>
+  <rect x="484" y="476" width="232" height="54" rx="27" fill="#34d9b4"/>
+  <text x="600" y="511" text-anchor="middle" font-family="-apple-system, Segoe UI, Roboto, Arial, sans-serif" font-weight="700" font-size="22" fill="#000">Install ICODE</text>
+</svg>

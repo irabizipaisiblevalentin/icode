@@ -6,6 +6,7 @@ RUN bun install --frozen-lockfile || bun install
 
 COPY src ./src
 COPY public ./public
+COPY www ./www
 COPY tsconfig.json ./
 
 ENV PORT=8080
