@@ -8,6 +8,7 @@ import {
   activateInstallByCode,
   startTrial,
   addUsage,
+  touchInstall,
 } from "../db"
 import { hitRateLimit } from "../rate-limit"
 
@@ -105,6 +106,7 @@ export function heartbeat(req: HeartbeatRequest): HeartbeatResponse {
   const now = new Date()
   const periodKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`
   addUsage(install.id, periodKey, req.seconds_active)
+  touchInstall(install.id)
 
   return {
     ok: true,

@@ -15,6 +15,7 @@ import {
   adminIssuePasscode,
   adminListCustomers,
   adminListTrials,
+  adminListUsers,
   adminDeleteCustomer,
   type AdminPasscodeCreateRequest,
   type IssuePasscodeRequest,
@@ -254,6 +255,11 @@ const server = Bun.serve({
       // Installs
       if (path === "/v1/admin/installs" && method === "GET") {
         return json(adminListInstalls())
+      }
+
+      // Users (installations enriched with passcode + customer + usage)
+      if (path === "/v1/admin/users" && method === "GET") {
+        return json(adminListUsers())
       }
 
       // Trials

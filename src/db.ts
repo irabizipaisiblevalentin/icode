@@ -412,6 +412,12 @@ export function addUsage(installId: string, periodKey: string, seconds: number) 
   )
 }
 
+// Refresh the "last seen" marker so the admin Users view can show who is
+// actively using ICODE right now. Called on every heartbeat.
+export function touchInstall(installId: string): void {
+  db().run(`UPDATE installs SET last_seen_at = datetime('now') WHERE id = ?`, [installId])
+}
+
 export function getUsage(installId: string, periodKey: string): number {
   const row = db().query<{ seconds_used: number }, [string, string]>(
     `SELECT seconds_used FROM usage WHERE install_id = ? AND period_key = ?`,
@@ -526,6 +532,54 @@ export function listPendingTrialAlerts(hoursWindow: number): TrialListItem[] {
       AND i.machine_id NOT IN (SELECT machine_id FROM trial_alerts)
     ORDER BY p.expires_at ASC
   `).all(limit)
+}
+
+// Installations enriched with the linked passcode, customer (if any) and the
+// seconds used this calendar month, so the admin can see exactly who is using
+// ICODE and how active they are.
+export interface UserListItem {
+  id: string
+  machine_id: string
+  hardware_id: string | null
+  platform: string
+  arch: string
+  version: string | null
+  passcode_id: string | null
+  passcode_code: string | null
+  passcode_type: string | null
+  passcode_expires_at: string | null
+  customer_name: string | null
+  customer_email: string | null
+  customer_phone: string | null
+  trial_started_at: string | null
+  registered_at: string
+  last_seen_at: string
+  blocked: number
+  block_reason: string | null
+  usage_month: number
+}
+
+export function listUsers(): UserListItem[] {
+  const now = new Date()
+  const periodKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`
+  return db().query<UserListItem, [string]>(`
+    SELECT i.id, i.machine_id, i.hardware_id, i.platform, i.arch, i.version,
+           i.passcode_id,
+           p.code AS passcode_code,
+           p.type AS passcode_type,
+           p.expires_at AS passcode_expires_at,
+           c.name AS customer_name,
+           c.email AS customer_email,
+           c.phone AS customer_phone,
+           i.trial_started_at, i.registered_at, i.last_seen_at,
+           i.blocked, i.block_reason,
+           COALESCE(u.seconds_used, 0) AS usage_month
+    FROM installs i
+    LEFT JOIN passcodes p ON p.id = i.passcode_id
+    LEFT JOIN customers c ON c.passcode_id = i.passcode_id
+    LEFT JOIN usage u ON u.install_id = i.id AND u.period_key = ?
+    ORDER BY i.last_seen_at DESC
+  `).all(periodKey)
 }
 
 export function markTrialAlerted(machineId: string, passcodeId: string | null, expiresAt: string): void {
@@ -659,6 +713,8 @@ export function getPaymentStats() {
     rejected: count("status = 'REJECTED'"),
     active_passcodes: d.query<{ c: number }, [string]>(`SELECT COUNT(*) AS c FROM passcodes WHERE blocked = 0 AND expires_at > ?`).get(now)?.c ?? 0,
     expired_passcodes: d.query<{ c: number }, [string]>(`SELECT COUNT(*) AS c FROM passcodes WHERE blocked = 0 AND expires_at <= ?`).get(now)?.c ?? 0,
+    total_users: d.query<{ c: number }, []>(`SELECT COUNT(*) AS c FROM installs`).get()?.c ?? 0,
+    online_users: d.query<{ c: number }, []>(`SELECT COUNT(*) AS c FROM installs WHERE blocked = 0 AND last_seen_at >= datetime('now', '-5 minutes')`).get()?.c ?? 0,
   }
 }
 

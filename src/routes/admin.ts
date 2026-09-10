@@ -1,6 +1,7 @@
 import {
   listPasscodes,
   listInstalls,
+  listUsers,
   listTrials,
   blockPasscode,
   unblockPasscode,
@@ -121,6 +122,16 @@ export interface AdminInstallListResponse {
 
 export function adminListInstalls(): AdminInstallListResponse {
   return { installs: listInstalls() }
+}
+
+// ─── User Tracking ───────────────────────────────────────────────────
+
+export interface AdminUserListResponse {
+  users: ReturnType<typeof listUsers>
+}
+
+export function adminListUsers(): AdminUserListResponse {
+  return { users: listUsers() }
 }
 
 // ─── Trial Management ─────────────────────────────────────────────────
