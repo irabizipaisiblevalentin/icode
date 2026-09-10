@@ -37,6 +37,7 @@ import {
   isValidWebhook,
   listPendingTrialAlerts,
   markTrialAlerted,
+  backendName,
 } from "./db"
 import { hitRateLimit } from "./rate-limit"
 import { sendTrialExpiryNotification } from "./notify"
@@ -313,7 +314,7 @@ const server = Bun.serve({
   },
 })
 
-console.log(`iCode Control Server running on port ${server.port}`)
+console.log(`iCode Control Server running on port ${server.port} (db: ${backendName()})`)
 
 // ─── Trial expiry scheduler ───────────────────────────────────────────
 // Checks every hour for trials expiring within 48h that haven't been alerted
