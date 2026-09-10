@@ -160,14 +160,6 @@ const server = Bun.serve({
       return json({ ok: true, timestamp: new Date().toISOString() })
     }
 
-    // ── Web UI (access page + admin dashboard SPA) ────────────────────
-
-    if (path === "/access" || path === "/admin" || path === "/admin/") {
-      return new Response(Bun.file(DASHBOARD_PATH), {
-        headers: { "Content-Type": "text/html" },
-      })
-    }
-
     // ── Admin API (auth required) ─────────────────────────────────────
 
     if (path.startsWith("/v1/admin/")) {
