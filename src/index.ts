@@ -109,19 +109,19 @@ const server = Bun.serve({
 
     if (path === "/v1/passcode/validate" && method === "POST") {
       const body = await parseBody<ValidateRequest>(request)
-      const result = validate(body)
+      const result = await validate(body)
       return json(result, result.ok ? 200 : 403)
     }
 
     if (path === "/v1/install/heartbeat" && method === "POST") {
       const body = await parseBody<HeartbeatRequest>(request)
-      const result = heartbeat(body)
+      const result = await heartbeat(body)
       return json(result, result.ok ? 200 : 403)
     }
 
     if (path === "/v1/install/status" && method === "POST") {
       const body = await parseBody<StatusRequest>(request)
-      const result = status(body)
+      const result = await status(body)
       return json(result, result.ok ? 200 : 403)
     }
 
@@ -131,13 +131,13 @@ const server = Bun.serve({
         return json({ ok: false, error: "Rate limited. Try again shortly." }, 429)
       }
       const body = await parseBody<TrialRequest>(request)
-      const result = trial(body)
+      const result = await trial(body)
       return json(result, 200)
     }
 
     if (path === "/v1/install/activate" && method === "POST") {
       const body = await parseBody<ActivateRequest>(request)
-      const result = activateByCode(body)
+      const result = await activateByCode(body)
       return json(result, result.ok ? 200 : 403)
     }
 
@@ -151,7 +151,7 @@ const server = Bun.serve({
         return json({ ok: false, error: "Invalid webhook token." }, 401)
       }
       const body = await parseBody<WebhookFormInput>(request)
-      const result = handleFormWebhook(body)
+      const result = await handleFormWebhook(body)
       return json(result, result.ok ? 201 : 400)
     }
 
@@ -170,72 +170,72 @@ const server = Bun.serve({
 
       // Dashboard statistics
       if (path === "/v1/admin/dashboard/stats" && method === "GET") {
-        return json(getPaymentStats())
+        return json(await getPaymentStats())
       }
 
       // Audit log
       if (path === "/v1/admin/audit-log" && method === "GET") {
-        return json({ entries: listAuditLog() })
+        return json({ entries: await listAuditLog() })
       }
 
       // Payment requests
       if (path === "/v1/admin/payment-requests" && method === "GET") {
-        return json({ requests: listPaymentRequests() })
+        return json({ requests: await listPaymentRequests() })
       }
 
       const approveMatch = path.match(/^\/v1\/admin\/payment-requests\/([^/]+)\/approve$/)
       if (approveMatch && method === "POST") {
         const body = await parseBody<ApproveRequest>(request)
-        const result = adminApprovePaymentRequest(approveMatch[1], body)
+        const result = await adminApprovePaymentRequest(approveMatch[1], body)
         return json(result, result.ok ? 200 : 400)
       }
 
       const rejectMatch = path.match(/^\/v1\/admin\/payment-requests\/([^/]+)\/reject$/)
       if (rejectMatch && method === "POST") {
         const body = await parseBody<{ adminNote?: string }>(request)
-        const result = adminRejectPaymentRequest(rejectMatch[1], body.adminNote)
+        const result = await adminRejectPaymentRequest(rejectMatch[1], body.adminNote)
         return json(result, result.ok ? 200 : 400)
       }
 
       const paymentMatch = path.match(/^\/v1\/admin\/payment-requests\/([^/]+)$/)
       if (paymentMatch && method === "GET") {
-        const req = getPaymentRequest(paymentMatch[1])
+        const req = await getPaymentRequest(paymentMatch[1])
         if (!req) return json({ error: "Payment request not found" }, 404)
         return json({ request: req })
       }
 
       // Passcodes
       if (path === "/v1/admin/passcodes" && method === "GET") {
-        return json(adminListPasscodes())
+        return json(await adminListPasscodes())
       }
 
       if (path === "/v1/admin/passcodes" && method === "POST") {
         const body = await parseBody<AdminPasscodeCreateRequest>(request)
-        const passcode = adminCreatePasscode(body)
+        const passcode = await adminCreatePasscode(body)
         return json(passcode, 201)
       }
 
       if (path === "/v1/admin/passcodes/generate" && method === "POST") {
         const body = await parseBody<{ type: "public" | "personal"; weeks?: number; days?: number }>(request)
         if (body.type === "public") {
-          return json(adminGeneratePublicCode(body.weeks ?? 3), 201)
+          return json(await adminGeneratePublicCode(body.weeks ?? 3), 201)
         } else {
-          return json(adminGeneratePersonalCode(body.days ?? 30), 201)
+          return json(await adminGeneratePersonalCode(body.days ?? 30), 201)
         }
       }
 
       // Issue/renew a passcode for a confirmed-paying customer
       if (path === "/v1/admin/passcodes/issue" && method === "POST") {
         const body = await parseBody<IssuePasscodeRequest>(request)
-        const result = adminIssuePasscode(body)
+        const result = await adminIssuePasscode(body)
         return json(result, 201)
       }
 
       const passcodeSubMatch = path.match(/^\/v1\/admin\/passcodes\/([^/]+)\/(revoke|reactivate)$/)
       if (passcodeSubMatch && method === "POST") {
         const id = passcodeSubMatch[1]
-        if (passcodeSubMatch[2] === "revoke") return json(adminRevokePasscode(id))
-        return json(adminReactivatePasscode(id))
+        if (passcodeSubMatch[2] === "revoke") return json(await adminRevokePasscode(id))
+        return json(await adminReactivatePasscode(id))
       }
 
       const passcodeMatch = path.match(/^\/v1\/admin\/passcodes\/([^/]+)$/)
@@ -243,38 +243,38 @@ const server = Bun.serve({
         const id = passcodeMatch[1]
         if (method === "PATCH") {
           const body = await parseBody<{ blocked?: boolean }>(request)
-          if (body.blocked === true) return json(adminBlockPasscode(id))
-          if (body.blocked === false) return json(adminUnblockPasscode(id))
+          if (body.blocked === true) return json(await adminBlockPasscode(id))
+          if (body.blocked === false) return json(await adminUnblockPasscode(id))
           return json({ error: "Invalid patch" }, 400)
         }
         if (method === "DELETE") {
-          return json(adminDeletePasscode(id))
+          return json(await adminDeletePasscode(id))
         }
       }
 
       // Installs
       if (path === "/v1/admin/installs" && method === "GET") {
-        return json(adminListInstalls())
+        return json(await adminListInstalls())
       }
 
       // Users (installations enriched with passcode + customer + usage)
       if (path === "/v1/admin/users" && method === "GET") {
-        return json(adminListUsers())
+        return json(await adminListUsers())
       }
 
       // Trials
       if (path === "/v1/admin/trials" && method === "GET") {
-        return json(adminListTrials())
+        return json(await adminListTrials())
       }
 
       // Customers
       if (path === "/v1/admin/customers" && method === "GET") {
-        return json(adminListCustomers())
+        return json(await adminListCustomers())
       }
 
       const customerMatch = path.match(/^\/v1\/admin\/customers\/([^/]+)$/)
       if (customerMatch && method === "DELETE") {
-        return json(adminDeleteCustomer(customerMatch[1]))
+        return json(await adminDeleteCustomer(customerMatch[1]))
       }
 
       const installMatch = path.match(/^\/v1\/admin\/installs\/([^/]+)$/)
@@ -282,12 +282,12 @@ const server = Bun.serve({
         const id = installMatch[1]
         if (method === "PATCH") {
           const body = await parseBody<{ blocked?: boolean; reason?: string }>(request)
-          if (body.blocked === true) return json(adminBlockInstall(id, body.reason))
-          if (body.blocked === false) return json(adminUnblockInstall(id))
+          if (body.blocked === true) return json(await adminBlockInstall(id, body.reason))
+          if (body.blocked === false) return json(await adminUnblockInstall(id))
           return json({ error: "Invalid patch" }, 400)
         }
         if (method === "DELETE") {
-          return json(adminDeleteInstall(id))
+          return json(await adminDeleteInstall(id))
         }
       }
 
@@ -323,7 +323,7 @@ const TRIAL_ALERT_WINDOW_HOURS = 48
 
 async function checkTrialExpiries(): Promise<void> {
   try {
-    const pending = listPendingTrialAlerts(TRIAL_ALERT_WINDOW_HOURS)
+    const pending = await listPendingTrialAlerts(TRIAL_ALERT_WINDOW_HOURS)
     for (const t of pending) {
       const sent = await sendTrialExpiryNotification({
         machineId: t.machine_id,
@@ -331,7 +331,7 @@ async function checkTrialExpiries(): Promise<void> {
         platform: t.platform,
       })
       if (sent) {
-        markTrialAlerted(t.machine_id, t.passcode_id, t.expires_at ?? "")
+        await markTrialAlerted(t.machine_id, t.passcode_id, t.expires_at ?? "")
       }
     }
   } catch (e) {

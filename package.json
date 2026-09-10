@@ -11,5 +11,8 @@
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0"
   }
 }

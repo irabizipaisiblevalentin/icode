@@ -1,9 +1,7 @@
-import { Database } from "bun:sqlite"
 import { createHash, randomInt, randomUUID } from "crypto"
-import { mkdirSync } from "fs"
-import { join } from "path"
+import { getDriver, backendName, type SqlDriver } from "./db-driver"
 
-const DB_PATH = process.env.DB_PATH ?? (process.env.DATA_DIR ? join(process.env.DATA_DIR, "icode-control.db") : "./icode-control.db")
+export { backendName }
 
 export const ACCESS_DURATION_DAYS = parseInt(process.env.ICODE_ACCESS_DURATION_DAYS ?? "30")
 export const TRIAL_DURATION_DAYS = parseInt(process.env.ICODE_TRIAL_DURATION_DAYS ?? "21")
@@ -18,24 +16,33 @@ export function isValidWebhook(request: Request): boolean {
   return true
 }
 
-let _db: Database | null = null
+let _ready: Promise<SqlDriver> | null = null
 
-function db(): Database {
-  if (!_db) {
-    if (DB_PATH !== ":memory:") {
-      const parent = DB_PATH.includes("/") ? DB_PATH.slice(0, DB_PATH.lastIndexOf("/")) : "."
-      if (parent && parent !== ".") mkdirSync(parent, { recursive: true })
-    }
-    _db = new Database(DB_PATH)
-    _db.run("PRAGMA journal_mode = WAL")
-    _db.run("PRAGMA busy_timeout = 5000")
-    init(_db)
+async function db(): Promise<SqlDriver> {
+  if (!_ready) {
+    _ready = (async () => {
+      const driver = getDriver()
+      await ensureSchema(driver)
+      return driver
+    })()
   }
-  return _db
+  return _ready
 }
 
-function init(db: Database) {
-  db.run(`
+// Creates the tables (and applies legacy migrations) on any driver. Exported so
+// tooling such as the Turso migration script can bring a fresh remote database
+// up to the same schema before copying rows across.
+export async function ensureSchema(db: SqlDriver): Promise<void> {
+  await init(db)
+}
+
+// Backdoor for tests/scripts: force re-initialisation against a fresh driver.
+export function resetDbForTest(): void {
+  _ready = null
+}
+
+async function init(db: SqlDriver) {
+  await db.run(`
     CREATE TABLE IF NOT EXISTS passcodes (
       id TEXT PRIMARY KEY,
       code TEXT UNIQUE NOT NULL,
@@ -50,7 +57,7 @@ function init(db: Database) {
       payment_request_id TEXT
     )
   `)
-  db.run(`
+  await db.run(`
     CREATE TABLE IF NOT EXISTS customers (
       id TEXT PRIMARY KEY,
       name TEXT,
@@ -60,14 +67,14 @@ function init(db: Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       passcode_id TEXT,
       last_payment_at TEXT,
-      notes TEXT,
-      FOREIGN KEY (passcode_id) REFERENCES passcodes(id)
+      notes TEXT
     )
   `)
-  db.run(`
+  await db.run(`
     CREATE TABLE IF NOT EXISTS installs (
       id TEXT PRIMARY KEY,
       machine_id TEXT UNIQUE NOT NULL,
+      hardware_id TEXT,
       platform TEXT NOT NULL,
       arch TEXT NOT NULL,
       version TEXT,
@@ -76,33 +83,25 @@ function init(db: Database) {
       last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
       blocked INTEGER NOT NULL DEFAULT 0,
       block_reason TEXT,
-      trial_started_at TEXT,
-      FOREIGN KEY (passcode_id) REFERENCES passcodes(id)
+      trial_started_at TEXT
     )
   `)
-  db.run(`
+  await db.run(`
     CREATE TABLE IF NOT EXISTS usage (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
       install_id TEXT NOT NULL,
       period_key TEXT NOT NULL,
       seconds_used REAL NOT NULL DEFAULT 0,
-      FOREIGN KEY (install_id) REFERENCES installs(id),
-      UNIQUE(install_id, period_key)
+      PRIMARY KEY (install_id, period_key)
     )
   `)
-  db.run(`
+  await db.run(`
     CREATE TABLE IF NOT EXISTS trial_alerts (
       machine_id TEXT PRIMARY KEY,
       passcode_id TEXT,
-      expires_at TEXT,
-      notified_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY (passcode_id) REFERENCES passcodes(id)
+      expires_at TEXT
     )
   `)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_passcodes_code ON passcodes(code)`)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_installs_machine ON installs(machine_id)`)
-
-  db.run(`
+  await db.run(`
     CREATE TABLE IF NOT EXISTS payment_requests (
       id TEXT PRIMARY KEY,
       full_name TEXT NOT NULL,
@@ -123,7 +122,7 @@ function init(db: Database) {
       verified_by TEXT
     )
   `)
-  db.run(`
+  await db.run(`
     CREATE TABLE IF NOT EXISTS audit_log (
       id TEXT PRIMARY KEY,
       action TEXT NOT NULL,
@@ -133,31 +132,31 @@ function init(db: Database) {
       metadata TEXT
     )
   `)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_payment_requests_transaction ON payment_requests(transaction_reference)`)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status)`)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_passcodes_payment ON passcodes(payment_request_id)`)
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_payment_requests_transaction ON payment_requests(transaction_reference)`)
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status)`)
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_passcodes_payment ON passcodes(payment_request_id)`)
 
   // Migrations for passcodes created by earlier versions of the table
-  const cols = db.query(`PRAGMA table_info(passcodes)`).all() as { name: string }[]
+  const cols = (await db.all(`PRAGMA table_info(passcodes)`)) as { name: string }[]
   if (!cols.some((c) => c.name === "payment_request_id")) {
-    db.run(`ALTER TABLE passcodes ADD COLUMN payment_request_id TEXT`)
+    await db.run(`ALTER TABLE passcodes ADD COLUMN payment_request_id TEXT`)
   }
   if (!cols.some((c) => c.name === "code_hash")) {
-    db.run(`ALTER TABLE passcodes ADD COLUMN code_hash TEXT`)
+    await db.run(`ALTER TABLE passcodes ADD COLUMN code_hash TEXT`)
     // Backfill hashes for any pre-existing plaintext codes.
-    const rows = db.query<{ id: string; code: string }, []>(`SELECT id, code FROM passcodes WHERE code_hash IS NULL`).all()
+    const rows = (await db.all(`SELECT id, code FROM passcodes WHERE code_hash IS NULL`)) as { id: string; code: string }[]
     for (const row of rows) {
-      db.run(`UPDATE passcodes SET code_hash = ? WHERE id = ?`, [hashCode(row.code), row.id])
+      await db.run(`UPDATE passcodes SET code_hash = ? WHERE id = ?`, [hashCode(row.code), row.id])
     }
   }
-  const installCols = db.query(`PRAGMA table_info(installs)`).all() as { name: string }[]
+  const installCols = (await db.all(`PRAGMA table_info(installs)`)) as { name: string }[]
   if (!installCols.some((c) => c.name === "trial_started_at")) {
-    db.run(`ALTER TABLE installs ADD COLUMN trial_started_at TEXT`)
+    await db.run(`ALTER TABLE installs ADD COLUMN trial_started_at TEXT`)
   }
   if (!installCols.some((c) => c.name === "hardware_id")) {
-    db.run(`ALTER TABLE installs ADD COLUMN hardware_id TEXT`)
+    await db.run(`ALTER TABLE installs ADD COLUMN hardware_id TEXT`)
   }
-  db.run(`CREATE INDEX IF NOT EXISTS idx_installs_hardware ON installs(hardware_id)`)
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_installs_hardware ON installs(hardware_id)`)
 }
 
 // ─── Passcodes ────────────────────────────────────────────────────────
@@ -176,51 +175,51 @@ export interface PasscodeRow {
   payment_request_id: string | null
 }
 
-export function createPasscode(opts: {
+export async function createPasscode(opts: {
   type: "public" | "personal"
   expires_at: string
   max_uses?: number | null
   code?: string
   note?: string
   payment_request_id?: string
-}): PasscodeRow {
-  const d = db()
+}): Promise<PasscodeRow> {
+  const d = await db()
   const id = randomUUID()
   const code = opts.code ?? randomCode()
-  d.run(
+  await d.run(
     `INSERT INTO passcodes (id, code, code_hash, type, expires_at, max_uses, note, payment_request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, code, hashCode(code), opts.type, opts.expires_at, opts.max_uses ?? null, opts.note ?? null, opts.payment_request_id ?? null],
   )
-  return getPasscode(id)!
+  return (await getPasscode(id))!
 }
 
-export function getPasscode(id: string): PasscodeRow | null {
-  return db().query<PasscodeRow, [string]>(`SELECT * FROM passcodes WHERE id = ?`).get(id) ?? null
+export async function getPasscode(id: string): Promise<PasscodeRow | null> {
+  return (await db()).get<PasscodeRow>(`SELECT * FROM passcodes WHERE id = ?`, [id])
 }
 
-export function findPasscodeByCode(code: string): PasscodeRow | null {
+export async function findPasscodeByCode(code: string): Promise<PasscodeRow | null> {
   const hash = hashCode(code)
-  return db().query<PasscodeRow, [string]>(`SELECT * FROM passcodes WHERE code_hash = ?`).get(hash) ?? null
+  return (await db()).get<PasscodeRow>(`SELECT * FROM passcodes WHERE code_hash = ?`, [hash])
 }
 
-export function listPasscodes(): PasscodeRow[] {
-  return db().query<PasscodeRow, []>(`SELECT * FROM passcodes ORDER BY created_at DESC`).all()
+export async function listPasscodes(): Promise<PasscodeRow[]> {
+  return (await db()).all<PasscodeRow>(`SELECT * FROM passcodes ORDER BY created_at DESC`)
 }
 
-export function incrementPasscodeUse(id: string) {
-  db().run(`UPDATE passcodes SET current_uses = current_uses + 1 WHERE id = ?`, [id])
+export async function incrementPasscodeUse(id: string): Promise<void> {
+  await (await db()).run(`UPDATE passcodes SET current_uses = current_uses + 1 WHERE id = ?`, [id])
 }
 
-export function blockPasscode(id: string) {
-  db().run(`UPDATE passcodes SET blocked = 1 WHERE id = ?`, [id])
+export async function blockPasscode(id: string): Promise<void> {
+  await (await db()).run(`UPDATE passcodes SET blocked = 1 WHERE id = ?`, [id])
 }
 
-export function unblockPasscode(id: string) {
-  db().run(`UPDATE passcodes SET blocked = 0 WHERE id = ?`, [id])
+export async function unblockPasscode(id: string): Promise<void> {
+  await (await db()).run(`UPDATE passcodes SET blocked = 0 WHERE id = ?`, [id])
 }
 
-export function deletePasscode(id: string) {
-  db().run(`DELETE FROM passcodes WHERE id = ?`, [id])
+export async function deletePasscode(id: string): Promise<void> {
+  await (await db()).run(`DELETE FROM passcodes WHERE id = ?`, [id])
 }
 
 // ─── Customers ────────────────────────────────────────────────────────
@@ -237,17 +236,17 @@ export interface CustomerRow {
   notes: string | null
 }
 
-export function createCustomer(opts: {
+export async function createCustomer(opts: {
   name?: string
   email?: string
   phone?: string
   reference?: string
   passcode_id?: string
   notes?: string
-}): CustomerRow {
-  const d = db()
+}): Promise<CustomerRow> {
+  const d = await db()
   const id = randomUUID()
-  d.run(
+  await d.run(
     `INSERT INTO customers (id, name, email, phone, reference, passcode_id, last_payment_at, notes)
      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
     [
@@ -260,40 +259,40 @@ export function createCustomer(opts: {
       opts.notes ?? null,
     ],
   )
-  return getCustomer(id)!
+  return (await getCustomer(id))!
 }
 
-export function getCustomer(id: string): CustomerRow | null {
-  return db().query<CustomerRow, [string]>(`SELECT * FROM customers WHERE id = ?`).get(id) ?? null
+export async function getCustomer(id: string): Promise<CustomerRow | null> {
+  return (await db()).get<CustomerRow>(`SELECT * FROM customers WHERE id = ?`, [id])
 }
 
-export function findCustomerByEmailOrRef(email?: string, ref?: string): CustomerRow | null {
-  const d = db()
+export async function findCustomerByEmailOrRef(email?: string, ref?: string): Promise<CustomerRow | null> {
+  const d = await db()
   if (email) {
-    const byEmail = d.query<CustomerRow, [string]>(`SELECT * FROM customers WHERE email = ?`).get(email)
+    const byEmail = await d.get<CustomerRow>(`SELECT * FROM customers WHERE email = ?`, [email])
     if (byEmail) return byEmail
   }
   if (ref) {
-    const byRef = d.query<CustomerRow, [string]>(`SELECT * FROM customers WHERE reference = ?`).get(ref)
+    const byRef = await d.get<CustomerRow>(`SELECT * FROM customers WHERE reference = ?`, [ref])
     if (byRef) return byRef
   }
   return null
 }
 
-export function listCustomers(): CustomerRow[] {
-  return db().query<CustomerRow, []>(`SELECT * FROM customers ORDER BY created_at DESC`).all()
+export async function listCustomers(): Promise<CustomerRow[]> {
+  return (await db()).all<CustomerRow>(`SELECT * FROM customers ORDER BY created_at DESC`)
 }
 
-export function linkCustomerPasscode(id: string, passcodeId: string) {
-  db().run(`UPDATE customers SET passcode_id = ?, last_payment_at = datetime('now') WHERE id = ?`, [passcodeId, id])
+export async function linkCustomerPasscode(id: string, passcodeId: string): Promise<void> {
+  await (await db()).run(`UPDATE customers SET passcode_id = ?, last_payment_at = datetime('now') WHERE id = ?`, [passcodeId, id])
 }
 
-export function updateCustomerNotes(id: string, notes: string | null) {
-  db().run(`UPDATE customers SET notes = ? WHERE id = ?`, [notes ?? null, id])
+export async function updateCustomerNotes(id: string, notes: string | null): Promise<void> {
+  await (await db()).run(`UPDATE customers SET notes = ? WHERE id = ?`, [notes ?? null, id])
 }
 
-export function deleteCustomer(id: string) {
-  db().run(`DELETE FROM customers WHERE id = ?`, [id])
+export async function deleteCustomer(id: string): Promise<void> {
+  await (await db()).run(`DELETE FROM customers WHERE id = ?`, [id])
 }
 
 // ─── Installs ─────────────────────────────────────────────────────────
@@ -313,30 +312,28 @@ export interface InstallRow {
   trial_started_at: string | null
 }
 
-export function upsertInstall(opts: {
+export async function upsertInstall(opts: {
   machine_id: string
   hardware_id?: string
   platform: string
   arch: string
   version?: string
   passcode_id?: string
-}): InstallRow {
-  const d = db()
-  const existing = d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(opts.machine_id)
+}): Promise<InstallRow> {
+  const d = await db()
+  const existing = await d.get<InstallRow>(`SELECT * FROM installs WHERE machine_id = ?`, [opts.machine_id])
 
   // The machine_id is new (often after a reinstall wiped the state folder), but
   // the same PC may already be known by its hardware fingerprint. In that case
   // adopt the existing install (keeping its trial/passcode/history) instead of
   // creating a duplicate that could restart the free trial.
   const knownByHardware =
-    !existing && opts.hardware_id
-      ? d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE hardware_id = ?`).get(opts.hardware_id)
-      : null
+    !existing && opts.hardware_id ? await d.get<InstallRow>(`SELECT * FROM installs WHERE hardware_id = ?`, [opts.hardware_id]) : null
 
   if (existing || knownByHardware) {
     const row = existing ?? knownByHardware!
     const hardwareId = opts.hardware_id || row.hardware_id
-    d.run(
+    await d.run(
       `UPDATE installs SET machine_id = ?, hardware_id = ?, platform = ?, arch = ?, version = ?, passcode_id = ?, last_seen_at = datetime('now') WHERE id = ?`,
       [
         opts.machine_id,
@@ -348,50 +345,50 @@ export function upsertInstall(opts: {
         row.id,
       ],
     )
-    return d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE id = ?`).get(row.id)!
+    return (await d.get<InstallRow>(`SELECT * FROM installs WHERE id = ?`, [row.id]))!
   }
 
   const id = randomUUID()
-  d.run(
+  await d.run(
     `INSERT INTO installs (id, machine_id, hardware_id, platform, arch, version, passcode_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [id, opts.machine_id, opts.hardware_id ?? null, opts.platform, opts.arch, opts.version ?? null, opts.passcode_id ?? null],
   )
-  return d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE id = ?`).get(id)!
+  return (await d.get<InstallRow>(`SELECT * FROM installs WHERE id = ?`, [id]))!
 }
 
-export function getInstallByHardware(hardwareId: string): InstallRow | null {
-  return db().query<InstallRow, [string]>(`SELECT * FROM installs WHERE hardware_id = ?`).get(hardwareId) ?? null
+export async function getInstallByHardware(hardwareId: string): Promise<InstallRow | null> {
+  return (await db()).get<InstallRow>(`SELECT * FROM installs WHERE hardware_id = ?`, [hardwareId])
 }
 
-export function getInstallByMachine(machineId: string): InstallRow | null {
-  return db().query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(machineId) ?? null
+export async function getInstallByMachine(machineId: string): Promise<InstallRow | null> {
+  return (await db()).get<InstallRow>(`SELECT * FROM installs WHERE machine_id = ?`, [machineId])
 }
 
-export function getInstallByMachineOrHardware(machineId: string, hardwareId?: string | null): InstallRow | null {
-  const d = db()
-  const byMachine = d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE machine_id = ?`).get(machineId)
+export async function getInstallByMachineOrHardware(machineId: string, hardwareId?: string | null): Promise<InstallRow | null> {
+  const d = await db()
+  const byMachine = await d.get<InstallRow>(`SELECT * FROM installs WHERE machine_id = ?`, [machineId])
   if (byMachine) return byMachine
   if (hardwareId) {
-    const byHardware = d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE hardware_id = ?`).get(hardwareId)
+    const byHardware = await d.get<InstallRow>(`SELECT * FROM installs WHERE hardware_id = ?`, [hardwareId])
     if (byHardware) return byHardware
   }
   return null
 }
 
-export function listInstalls(): InstallRow[] {
-  return db().query<InstallRow, []>(`SELECT * FROM installs ORDER BY last_seen_at DESC`).all()
+export async function listInstalls(): Promise<InstallRow[]> {
+  return (await db()).all<InstallRow>(`SELECT * FROM installs ORDER BY last_seen_at DESC`)
 }
 
-export function blockInstall(id: string, reason?: string) {
-  db().run(`UPDATE installs SET blocked = 1, block_reason = ? WHERE id = ?`, [reason ?? null, id])
+export async function blockInstall(id: string, reason?: string): Promise<void> {
+  await (await db()).run(`UPDATE installs SET blocked = 1, block_reason = ? WHERE id = ?`, [reason ?? null, id])
 }
 
-export function unblockInstall(id: string) {
-  db().run(`UPDATE installs SET blocked = 0, block_reason = NULL WHERE id = ?`, [id])
+export async function unblockInstall(id: string): Promise<void> {
+  await (await db()).run(`UPDATE installs SET blocked = 0, block_reason = NULL WHERE id = ?`, [id])
 }
 
-export function deleteInstall(id: string) {
-  db().run(`DELETE FROM installs WHERE id = ?`, [id])
+export async function deleteInstall(id: string): Promise<void> {
+  await (await db()).run(`DELETE FROM installs WHERE id = ?`, [id])
 }
 
 // ─── Usage ────────────────────────────────────────────────────────────
@@ -403,9 +400,9 @@ export interface UsageRow {
   seconds_used: number
 }
 
-export function addUsage(installId: string, periodKey: string, seconds: number) {
-  const d = db()
-  d.run(
+export async function addUsage(installId: string, periodKey: string, seconds: number): Promise<void> {
+  const d = await db()
+  await d.run(
     `INSERT INTO usage (install_id, period_key, seconds_used) VALUES (?, ?, ?)
      ON CONFLICT(install_id, period_key) DO UPDATE SET seconds_used = seconds_used + ?`,
     [installId, periodKey, seconds, seconds],
@@ -414,14 +411,15 @@ export function addUsage(installId: string, periodKey: string, seconds: number) 
 
 // Refresh the "last seen" marker so the admin Users view can show who is
 // actively using ICODE right now. Called on every heartbeat.
-export function touchInstall(installId: string): void {
-  db().run(`UPDATE installs SET last_seen_at = datetime('now') WHERE id = ?`, [installId])
+export async function touchInstall(installId: string): Promise<void> {
+  await (await db()).run(`UPDATE installs SET last_seen_at = datetime('now') WHERE id = ?`, [installId])
 }
 
-export function getUsage(installId: string, periodKey: string): number {
-  const row = db().query<{ seconds_used: number }, [string, string]>(
+export async function getUsage(installId: string, periodKey: string): Promise<number> {
+  const row = await (await db()).get<{ seconds_used: number }>(
     `SELECT seconds_used FROM usage WHERE install_id = ? AND period_key = ?`,
-  ).get(installId, periodKey)
+    [installId, periodKey],
+  )
   return row?.seconds_used ?? 0
 }
 
@@ -437,34 +435,34 @@ export interface TrialResult {
 // Grants a one-time free trial per machine. A trial is issued only once per
 // hardware; repeat calls (or reinstalls under a new machine_id) return the
 // existing trial (so it cannot be restarted or extended by reinstalling).
-export function startTrial(opts: {
+export async function startTrial(opts: {
   machine_id: string
   hardware_id?: string
   platform: string
   arch: string
   version?: string
-}): TrialResult {
-  const d = db()
-  const install = upsertInstall(opts)
+}): Promise<TrialResult> {
+  const d = await db()
+  const install = await upsertInstall(opts)
 
   if (install.trial_started_at) {
     return {
       install,
-      passcode: install.passcode_id ? getPasscode(install.passcode_id) : null,
+      passcode: install.passcode_id ? await getPasscode(install.passcode_id) : null,
       already_started: true,
-      trial_expires_at: install.passcode_id ? (getPasscode(install.passcode_id)?.expires_at ?? null) : null,
+      trial_expires_at: install.passcode_id ? ((await getPasscode(install.passcode_id))?.expires_at ?? null) : null,
     }
   }
 
-  d.run(`UPDATE installs SET trial_started_at = datetime('now') WHERE id = ?`, [install.id])
+  await d.run(`UPDATE installs SET trial_started_at = datetime('now') WHERE id = ?`, [install.id])
 
   const expires = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
-  const passcode = createPasscode({ type: "public", expires_at: expires, note: "Free 21-day trial" })
-  d.run(`UPDATE installs SET passcode_id = ? WHERE id = ?`, [passcode.id, install.id])
+  const passcode = await createPasscode({ type: "public", expires_at: expires, note: "Free 21-day trial" })
+  await d.run(`UPDATE installs SET passcode_id = ? WHERE id = ?`, [passcode.id, install.id])
 
-  writeAudit("TRIAL_STARTED", opts.machine_id, install.id, { machine_id: opts.machine_id })
+  await writeAudit("TRIAL_STARTED", opts.machine_id, install.id, { machine_id: opts.machine_id })
   return {
-    install: d.query<InstallRow, [string]>(`SELECT * FROM installs WHERE id = ?`).get(install.id)!,
+    install: (await d.get<InstallRow>(`SELECT * FROM installs WHERE id = ?`, [install.id]))!,
     passcode,
     already_started: false,
     trial_expires_at: expires,
@@ -473,14 +471,14 @@ export function startTrial(opts: {
 
 // Binds a machine to a validated passcode. Used by the web access page so a
 // CLI waiting on /v1/install/status can see the activation take effect.
-export function activateInstallByCode(opts: {
+export async function activateInstallByCode(opts: {
   machine_id: string
   hardware_id?: string
   platform: string
   arch: string
   version?: string
   passcode_id: string
-}): InstallRow {
+}): Promise<InstallRow> {
   return upsertInstall({
     machine_id: opts.machine_id,
     hardware_id: opts.hardware_id,
@@ -506,22 +504,23 @@ export interface TrialListItem {
 }
 
 // Installs that received a free trial, with the linked passcode expiry.
-export function listTrials(): TrialListItem[] {
-  return db().query<TrialListItem, []>(`
+export async function listTrials(): Promise<TrialListItem[]> {
+  return (await db()).all<TrialListItem>(`
     SELECT i.id AS install_id, i.machine_id, i.platform, i.arch, i.version,
            i.passcode_id, i.trial_started_at, p.expires_at, i.blocked
     FROM installs i
     LEFT JOIN passcodes p ON p.id = i.passcode_id
     WHERE i.trial_started_at IS NOT NULL
     ORDER BY i.trial_started_at DESC
-  `).all()
+  `)
 }
 
 // Trials that are within `hoursWindow` hours of expiry (or already expired) and
 // have not yet been alerted, so the operator can nudge each user once.
-export function listPendingTrialAlerts(hoursWindow: number): TrialListItem[] {
+export async function listPendingTrialAlerts(hoursWindow: number): Promise<TrialListItem[]> {
   const limit = new Date(Date.now() + hoursWindow * 60 * 60 * 1000).toISOString()
-  return db().query<TrialListItem, [string]>(`
+  return (await db()).all<TrialListItem>(
+    `
     SELECT i.id AS install_id, i.machine_id, i.platform, i.arch, i.version,
            i.passcode_id, i.trial_started_at, p.expires_at, i.blocked
     FROM installs i
@@ -531,7 +530,9 @@ export function listPendingTrialAlerts(hoursWindow: number): TrialListItem[] {
       AND p.expires_at <= ?
       AND i.machine_id NOT IN (SELECT machine_id FROM trial_alerts)
     ORDER BY p.expires_at ASC
-  `).all(limit)
+  `,
+    [limit],
+  )
 }
 
 // Installations enriched with the linked passcode, customer (if any) and the
@@ -559,10 +560,11 @@ export interface UserListItem {
   usage_month: number
 }
 
-export function listUsers(): UserListItem[] {
+export async function listUsers(): Promise<UserListItem[]> {
   const now = new Date()
   const periodKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`
-  return db().query<UserListItem, [string]>(`
+  return (await db()).all<UserListItem>(
+    `
     SELECT i.id, i.machine_id, i.hardware_id, i.platform, i.arch, i.version,
            i.passcode_id,
            p.code AS passcode_code,
@@ -579,11 +581,13 @@ export function listUsers(): UserListItem[] {
     LEFT JOIN customers c ON c.passcode_id = i.passcode_id
     LEFT JOIN usage u ON u.install_id = i.id AND u.period_key = ?
     ORDER BY i.last_seen_at DESC
-  `).all(periodKey)
+  `,
+    [periodKey],
+  )
 }
 
-export function markTrialAlerted(machineId: string, passcodeId: string | null, expiresAt: string): void {
-  db().run(
+export async function markTrialAlerted(machineId: string, passcodeId: string | null, expiresAt: string): Promise<void> {
+  await (await db()).run(
     `INSERT OR REPLACE INTO trial_alerts (machine_id, passcode_id, expires_at) VALUES (?, ?, ?)`,
     [machineId, passcodeId, expiresAt],
   )
@@ -625,28 +629,26 @@ export interface PaymentRequestInput {
   paymentProof?: string
 }
 
-export function findDuplicatePayment(
+export async function findDuplicatePayment(
   reference?: string,
   method?: string,
   amount?: number,
   email?: string,
-): PaymentRequestRow | null {
+): Promise<PaymentRequestRow | null> {
   if (!reference) return null
-  const d = db()
-  return (
-    d
-      .query<PaymentRequestRow, [string]>(`SELECT * FROM payment_requests WHERE transaction_reference = ? ORDER BY created_at DESC LIMIT 1`)
-      .get(reference) ?? null
+  return (await db()).get<PaymentRequestRow>(
+    `SELECT * FROM payment_requests WHERE transaction_reference = ? ORDER BY created_at DESC LIMIT 1`,
+    [reference],
   )
 }
 
-export function createPaymentRequest(input: PaymentRequestInput): { request: PaymentRequestRow; isDuplicate: boolean } {
-  const d = db()
-  const duplicate = findDuplicatePayment(input.transactionReference, input.paymentMethod, input.paymentAmount, input.email)
+export async function createPaymentRequest(input: PaymentRequestInput): Promise<{ request: PaymentRequestRow; isDuplicate: boolean }> {
+  const d = await db()
+  const duplicate = await findDuplicatePayment(input.transactionReference, input.paymentMethod, input.paymentAmount, input.email)
   const id = randomUUID()
   const ref = input.transactionReference ?? null
   const method = (input.paymentMethod ?? "other").trim() || "other"
-  d.run(
+  await d.run(
     `INSERT INTO payment_requests (id, full_name, email, phone_number, payment_method, transaction_reference, payment_amount, payment_date, payment_time, payment_proof, is_duplicate)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
@@ -664,29 +666,32 @@ export function createPaymentRequest(input: PaymentRequestInput): { request: Pay
     ],
   )
   if (duplicate) {
-    writeAudit("DUPLICATE_PAYMENT", "system", id, { reference: input.transactionReference })
+    await writeAudit("DUPLICATE_PAYMENT", "system", id, { reference: input.transactionReference })
   }
-  return { request: getPaymentRequest(id)!, isDuplicate: !!duplicate }
+  return { request: (await getPaymentRequest(id))!, isDuplicate: !!duplicate }
 }
 
-export function getPaymentRequest(id: string): PaymentRequestRow | null {
-  return db().query<PaymentRequestRow, [string]>(`SELECT * FROM payment_requests WHERE id = ?`).get(id) ?? null
+export async function getPaymentRequest(id: string): Promise<PaymentRequestRow | null> {
+  return (await db()).get<PaymentRequestRow>(`SELECT * FROM payment_requests WHERE id = ?`, [id])
 }
 
-export function listPaymentRequests(): PaymentRequestRow[] {
-  return db().query<PaymentRequestRow, []>(`SELECT * FROM payment_requests ORDER BY created_at DESC`).all()
+export async function listPaymentRequests(): Promise<PaymentRequestRow[]> {
+  return (await db()).all<PaymentRequestRow>(`SELECT * FROM payment_requests ORDER BY created_at DESC`)
 }
 
-export function getPaymentRequestByPasscode(passcodeId: string): PaymentRequestRow | null {
-  return db().query<PaymentRequestRow, [string]>(`SELECT * FROM payment_requests WHERE id = (SELECT payment_request_id FROM passcodes WHERE id = ?)`).get(passcodeId) ?? null
+export async function getPaymentRequestByPasscode(passcodeId: string): Promise<PaymentRequestRow | null> {
+  return (await db()).get<PaymentRequestRow>(
+    `SELECT * FROM payment_requests WHERE id = (SELECT payment_request_id FROM passcodes WHERE id = ?)`,
+    [passcodeId],
+  )
 }
 
-export function updatePaymentRequestStatus(
+export async function updatePaymentRequestStatus(
   id: string,
   status: PaymentStatus,
   options?: { adminNote?: string; verifiedBy?: string },
-) {
-  db().run(
+): Promise<PaymentRequestRow | null> {
+  await (await db()).run(
     `UPDATE payment_requests SET status = ?, admin_note = ?, verified_at = ?, verified_by = ?, updated_at = datetime('now') WHERE id = ?`,
     [
       status,
@@ -699,22 +704,25 @@ export function updatePaymentRequestStatus(
   return getPaymentRequest(id)
 }
 
-export function getPaymentStats() {
-  const d = db()
-  const count = (where: string) => {
-    const row = d.query<{ c: number }, []>(`SELECT COUNT(*) AS c FROM payment_requests WHERE ${where}`).get()
+export async function getPaymentStats() {
+  const d = await db()
+  const count = async (where: string) => {
+    const row = await d.get<{ c: number }>(`SELECT COUNT(*) AS c FROM payment_requests WHERE ${where}`)
     return row?.c ?? 0
   }
   const now = new Date().toISOString()
   return {
-    total: count("1 = 1"),
-    pending: count("status = 'PENDING'"),
-    approved: count("status = 'APPROVED'"),
-    rejected: count("status = 'REJECTED'"),
-    active_passcodes: d.query<{ c: number }, [string]>(`SELECT COUNT(*) AS c FROM passcodes WHERE blocked = 0 AND expires_at > ?`).get(now)?.c ?? 0,
-    expired_passcodes: d.query<{ c: number }, [string]>(`SELECT COUNT(*) AS c FROM passcodes WHERE blocked = 0 AND expires_at <= ?`).get(now)?.c ?? 0,
-    total_users: d.query<{ c: number }, []>(`SELECT COUNT(*) AS c FROM installs`).get()?.c ?? 0,
-    online_users: d.query<{ c: number }, []>(`SELECT COUNT(*) AS c FROM installs WHERE blocked = 0 AND last_seen_at >= datetime('now', '-5 minutes')`).get()?.c ?? 0,
+    total: await count("1 = 1"),
+    pending: await count("status = 'PENDING'"),
+    approved: await count("status = 'APPROVED'"),
+    rejected: await count("status = 'REJECTED'"),
+    active_passcodes: (await d.get<{ c: number }>(`SELECT COUNT(*) AS c FROM passcodes WHERE blocked = 0 AND expires_at > ?`, [now]))?.c ?? 0,
+    expired_passcodes: (await d.get<{ c: number }>(`SELECT COUNT(*) AS c FROM passcodes WHERE blocked = 0 AND expires_at <= ?`, [now]))?.c ?? 0,
+    total_users: (await d.get<{ c: number }>(`SELECT COUNT(*) AS c FROM installs`))?.c ?? 0,
+    online_users:
+      (await d.get<{ c: number }>(
+        `SELECT COUNT(*) AS c FROM installs WHERE blocked = 0 AND last_seen_at >= datetime('now', '-5 minutes')`,
+      ))?.c ?? 0,
   }
 }
 
@@ -729,15 +737,15 @@ export interface AuditLogRow {
   metadata: string | null
 }
 
-export function writeAudit(action: string, actorId: string, targetId?: string, metadata?: unknown) {
-  db().run(
+export async function writeAudit(action: string, actorId: string, targetId?: string, metadata?: unknown): Promise<void> {
+  await (await db()).run(
     `INSERT INTO audit_log (id, action, actor_id, target_id, metadata) VALUES (?, ?, ?, ?, ?)`,
     [randomUUID(), action, actorId, targetId ?? null, metadata ? JSON.stringify(metadata) : null],
   )
 }
 
-export function listAuditLog(): AuditLogRow[] {
-  return db().query<AuditLogRow, []>(`SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 500`).all()
+export async function listAuditLog(): Promise<AuditLogRow[]> {
+  return (await db()).all<AuditLogRow>(`SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 500`)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────

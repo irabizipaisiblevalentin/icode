@@ -36,7 +36,7 @@ export interface ValidateResponse {
   retry_after_seconds?: number
 }
 
-export function validate(req: ValidateRequest): ValidateResponse {
+export async function validate(req: ValidateRequest): Promise<ValidateResponse> {
   const limiter = hitRateLimit(`validate:${req.machine_id}`, 10, 60_000)
   if (!limiter.allowed) {
     return {
@@ -47,7 +47,7 @@ export function validate(req: ValidateRequest): ValidateResponse {
       message: "Too many attempts. Please try again in a moment.",
     }
   }
-  const passcode = findPasscodeByCode(req.code)
+  const passcode = await findPasscodeByCode(req.code)
   if (!passcode) {
     return { ok: false, reason: "not_found", message: "That Passcode does not exist. Check the Passcode you were given and try again." }
   }
@@ -61,8 +61,8 @@ export function validate(req: ValidateRequest): ValidateResponse {
     return { ok: false, reason: "max_uses", message: "This Passcode has reached its maximum allowed uses." }
   }
 
-  incrementPasscodeUse(passcode.id)
-  upsertInstall({
+  await incrementPasscodeUse(passcode.id)
+  await upsertInstall({
     machine_id: req.machine_id,
     hardware_id: req.hardware_id,
     platform: req.platform,
@@ -94,8 +94,8 @@ export interface HeartbeatResponse {
   warn?: boolean
 }
 
-export function heartbeat(req: HeartbeatRequest): HeartbeatResponse {
-  const install = getInstallByMachineOrHardware(req.machine_id, req.hardware_id)
+export async function heartbeat(req: HeartbeatRequest): Promise<HeartbeatResponse> {
+  const install = await getInstallByMachineOrHardware(req.machine_id, req.hardware_id)
   if (!install) {
     return { ok: false, message: "This device is not registered." }
   }
@@ -105,8 +105,8 @@ export function heartbeat(req: HeartbeatRequest): HeartbeatResponse {
 
   const now = new Date()
   const periodKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`
-  addUsage(install.id, periodKey, req.seconds_active)
-  touchInstall(install.id)
+  await addUsage(install.id, periodKey, req.seconds_active)
+  await touchInstall(install.id)
 
   return {
     ok: true,
@@ -132,8 +132,8 @@ export interface StatusResponse {
   message?: string
 }
 
-export function status(req: StatusRequest): StatusResponse {
-  const install = getInstallByMachineOrHardware(req.machine_id, req.hardware_id)
+export async function status(req: StatusRequest): Promise<StatusResponse> {
+  const install = await getInstallByMachineOrHardware(req.machine_id, req.hardware_id)
   if (!install) {
     return { ok: false, message: "This device is not registered." }
   }
@@ -141,7 +141,7 @@ export function status(req: StatusRequest): StatusResponse {
     return { ok: false, blocked: true, access_revoked: true, message: "Your access to iCode has been revoked. Please contact the iCode admin." }
   }
 
-  const passcode = install.passcode_id ? getPasscode(install.passcode_id) : null
+  const passcode = install.passcode_id ? await getPasscode(install.passcode_id) : null
   if (!passcode) {
     return { ok: false, passcode_valid: false, message: "No passcode is linked to this device." }
   }
@@ -192,8 +192,8 @@ export interface TrialResponse {
 }
 
 // Grants or reports a one-time free trial for a machine.
-export function trial(req: TrialRequest): TrialResponse {
-  const result = startTrial({
+export async function trial(req: TrialRequest): Promise<TrialResponse> {
+  const result = await startTrial({
     machine_id: req.machine_id,
     hardware_id: req.hardware_id,
     platform: req.platform,
@@ -238,12 +238,12 @@ export interface ActivateResponse {
   type?: "public" | "personal"
 }
 
-export function activateByCode(req: ActivateRequest): ActivateResponse {
+export async function activateByCode(req: ActivateRequest): Promise<ActivateResponse> {
   const code = (req.code ?? "").trim().toUpperCase()
   if (!code) return { ok: false, reason: "invalid", message: "Passcode must not be empty." }
   if (!req.machine_id) return { ok: false, reason: "invalid", message: "machine_id is missing." }
 
-  const passcode = findPasscodeByCode(code)
+  const passcode = await findPasscodeByCode(code)
   if (!passcode) return { ok: false, reason: "not_found", message: "That Passcode does not exist." }
   if (passcode.blocked) return { ok: false, reason: "blocked", message: "This Passcode has been revoked." }
   if (new Date(passcode.expires_at) < new Date()) return { ok: false, reason: "expired", message: "This Passcode has expired." }
@@ -251,8 +251,8 @@ export function activateByCode(req: ActivateRequest): ActivateResponse {
     return { ok: false, reason: "max_uses", message: "This Passcode has reached its maximum allowed uses." }
   }
 
-  incrementPasscodeUse(passcode.id)
-  activateInstallByCode({
+  await incrementPasscodeUse(passcode.id)
+  await activateInstallByCode({
     machine_id: req.machine_id,
     hardware_id: req.hardware_id,
     platform: req.platform,
@@ -272,7 +272,7 @@ export function activateByCode(req: ActivateRequest): ActivateResponse {
 
 // ─── Passcode Creation ────────────────────────────────────────────────
 
-export function createPublicCode(expiresAt: string, note?: string) {
+export async function createPublicCode(expiresAt: string, note?: string) {
   return createPasscode({
     type: "public",
     expires_at: expiresAt,
@@ -280,7 +280,7 @@ export function createPublicCode(expiresAt: string, note?: string) {
   })
 }
 
-export function createPersonalCode(expiresAt: string, maxUses?: number, note?: string) {
+export async function createPersonalCode(expiresAt: string, maxUses?: number, note?: string) {
   return createPasscode({
     type: "personal",
     expires_at: expiresAt,

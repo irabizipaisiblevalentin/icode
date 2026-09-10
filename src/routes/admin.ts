@@ -23,6 +23,8 @@ import {
   type InstallRow,
   type CustomerRow,
   type PasscodeCreatedView,
+  type UserListItem,
+  type TrialListItem,
 } from "../db"
 import { createPublicCode, createPersonalCode } from "./client"
 
@@ -72,8 +74,8 @@ function toAdminPasscode(p: PasscodeRow): AdminPasscodeView {
   }
 }
 
-export function adminListPasscodes(): AdminPasscodeListResponse {
-  return { passcodes: listPasscodes().map(toAdminPasscode) }
+export async function adminListPasscodes(): Promise<AdminPasscodeListResponse> {
+  return { passcodes: (await listPasscodes()).map(toAdminPasscode) }
 }
 
 export interface AdminPasscodeCreateRequest {
@@ -83,9 +85,9 @@ export interface AdminPasscodeCreateRequest {
   note?: string
 }
 
-export function adminCreatePasscode(req: AdminPasscodeCreateRequest): PasscodeCreatedView {
+export async function adminCreatePasscode(req: AdminPasscodeCreateRequest): Promise<PasscodeCreatedView> {
   return toCreatedPasscode(
-    createPasscode({
+    await createPasscode({
       type: req.type,
       expires_at: req.expires_at,
       max_uses: req.max_uses,
@@ -99,18 +101,18 @@ export interface AdminBlockResponse {
   message: string
 }
 
-export function adminBlockPasscode(id: string): AdminBlockResponse {
-  blockPasscode(id)
+export async function adminBlockPasscode(id: string): Promise<AdminBlockResponse> {
+  await blockPasscode(id)
   return { ok: true, message: "Passcode blocked." }
 }
 
-export function adminUnblockPasscode(id: string): AdminBlockResponse {
-  unblockPasscode(id)
+export async function adminUnblockPasscode(id: string): Promise<AdminBlockResponse> {
+  await unblockPasscode(id)
   return { ok: true, message: "Passcode unblocked." }
 }
 
-export function adminDeletePasscode(id: string): AdminBlockResponse {
-  deletePasscode(id)
+export async function adminDeletePasscode(id: string): Promise<AdminBlockResponse> {
+  await deletePasscode(id)
   return { ok: true, message: "Passcode deleted." }
 }
 
@@ -120,55 +122,55 @@ export interface AdminInstallListResponse {
   installs: InstallRow[]
 }
 
-export function adminListInstalls(): AdminInstallListResponse {
-  return { installs: listInstalls() }
+export async function adminListInstalls(): Promise<AdminInstallListResponse> {
+  return { installs: await listInstalls() }
 }
 
 // ─── User Tracking ───────────────────────────────────────────────────
 
 export interface AdminUserListResponse {
-  users: ReturnType<typeof listUsers>
+  users: UserListItem[]
 }
 
-export function adminListUsers(): AdminUserListResponse {
-  return { users: listUsers() }
+export async function adminListUsers(): Promise<AdminUserListResponse> {
+  return { users: await listUsers() }
 }
 
 // ─── Trial Management ─────────────────────────────────────────────────
 
 export interface AdminTrialListResponse {
-  trials: ReturnType<typeof listTrials>
+  trials: TrialListItem[]
 }
 
-export function adminListTrials(): AdminTrialListResponse {
-  return { trials: listTrials() }
+export async function adminListTrials(): Promise<AdminTrialListResponse> {
+  return { trials: await listTrials() }
 }
 
-export function adminBlockInstall(id: string, reason?: string): AdminBlockResponse {
-  blockInstall(id, reason)
+export async function adminBlockInstall(id: string, reason?: string): Promise<AdminBlockResponse> {
+  await blockInstall(id, reason)
   return { ok: true, message: "Install blocked." }
 }
 
-export function adminUnblockInstall(id: string): AdminBlockResponse {
-  unblockInstall(id)
+export async function adminUnblockInstall(id: string): Promise<AdminBlockResponse> {
+  await unblockInstall(id)
   return { ok: true, message: "Install unblocked." }
 }
 
-export function adminDeleteInstall(id: string): AdminBlockResponse {
-  deleteInstall(id)
+export async function adminDeleteInstall(id: string): Promise<AdminBlockResponse> {
+  await deleteInstall(id)
   return { ok: true, message: "Install deleted." }
 }
 
 // ─── Passcode Generation Helpers ──────────────────────────────────────
 
-export function adminGeneratePublicCode(weeksValid: number = 3): PasscodeCreatedView {
+export async function adminGeneratePublicCode(weeksValid: number = 3): Promise<PasscodeCreatedView> {
   const expiresAt = new Date(Date.now() + weeksValid * 7 * 24 * 60 * 60 * 1000).toISOString()
-  return toCreatedPasscode(createPublicCode(expiresAt, `Public code - ${weeksValid} weeks`))
+  return toCreatedPasscode(await createPublicCode(expiresAt, `Public code - ${weeksValid} weeks`))
 }
 
-export function adminGeneratePersonalCode(daysValid: number = 30): PasscodeCreatedView {
+export async function adminGeneratePersonalCode(daysValid: number = 30): Promise<PasscodeCreatedView> {
   const expiresAt = new Date(Date.now() + daysValid * 24 * 60 * 60 * 1000).toISOString()
-  return toCreatedPasscode(createPersonalCode(expiresAt, undefined, `Personal code - ${daysValid} days`))
+  return toCreatedPasscode(await createPersonalCode(expiresAt, undefined, `Personal code - ${daysValid} days`))
 }
 
 // ─── Customer Passcode Issuance ───────────────────────────────────────
@@ -195,31 +197,31 @@ export interface IssuePasscodeResponse {
  * If a matching customer already exists (same email or reference), we renew
  * their existing passcode instead of creating a brand-new orphaned one.
  */
-export function adminIssuePasscode(req: IssuePasscodeRequest): IssuePasscodeResponse {
-  const existing = findCustomerByEmailOrRef(req.email, req.reference)
+export async function adminIssuePasscode(req: IssuePasscodeRequest): Promise<IssuePasscodeResponse> {
+  const existing = await findCustomerByEmailOrRef(req.email, req.reference)
 
   if (existing && existing.passcode_id) {
-    const current = getPasscode(existing.passcode_id)
+    const current = await getPasscode(existing.passcode_id)
     const base = current ? new Date(current.expires_at).getTime() : Date.now()
     const from = Math.max(base, Date.now())
     const newExpiry = new Date(from + req.days * 24 * 60 * 60 * 1000)
-    const passcode = createPasscode({
+    const passcode = await createPasscode({
       type: "personal",
       expires_at: newExpiry.toISOString(),
       note: `${req.name ?? "Customer"} (renewed ${req.days} days)`,
     })
-    linkCustomerPasscode(existing.id, passcode.id)
-    if (req.name) updateCustomerNotes(existing.id, req.notes ?? null)
+    await linkCustomerPasscode(existing.id, passcode.id)
+    if (req.name) await updateCustomerNotes(existing.id, req.notes ?? null)
     return { ok: true, passcode: toCreatedPasscode(passcode), customer: existing, renewed: true, message: "Passcode renewed." }
   }
 
   // New customer → create both
-  const passcode = createPasscode({
+  const passcode = await createPasscode({
     type: "personal",
     expires_at: new Date(Date.now() + req.days * 24 * 60 * 60 * 1000).toISOString(),
     note: `${req.name ?? "Customer"} (${req.days} days)`,
   })
-  const customer = createCustomer({
+  const customer = await createCustomer({
     name: req.name,
     email: req.email,
     phone: req.phone,
@@ -236,11 +238,11 @@ export interface AdminCustomerListResponse {
   customers: CustomerRow[]
 }
 
-export function adminListCustomers(): AdminCustomerListResponse {
-  return { customers: listCustomers() }
+export async function adminListCustomers(): Promise<AdminCustomerListResponse> {
+  return { customers: await listCustomers() }
 }
 
-export function adminDeleteCustomer(id: string): AdminBlockResponse {
-  deleteCustomer(id)
+export async function adminDeleteCustomer(id: string): Promise<AdminBlockResponse> {
+  await deleteCustomer(id)
   return { ok: true, message: "Customer deleted." }
 }

@@ -44,12 +44,12 @@ export interface WebhookFormResponse {
   error?: string
 }
 
-export function handleFormWebhook(body: WebhookFormInput): WebhookFormResponse {
+export async function handleFormWebhook(body: WebhookFormInput): Promise<WebhookFormResponse> {
   const errors = validateWebhookInput(body)
   if (errors.length > 0) {
     return { ok: false, error: errors.join("; ") }
   }
-  const { request, isDuplicate } = createPaymentRequest({
+  const { request, isDuplicate } = await createPaymentRequest({
     fullName: body.fullName,
     email: body.email,
     phoneNumber: body.phoneNumber,
@@ -60,7 +60,7 @@ export function handleFormWebhook(body: WebhookFormInput): WebhookFormResponse {
     paymentTime: body.paymentTime,
     paymentProof: body.paymentProof,
   })
-  writeAudit("PAYMENT_SUBMITTED", "system", request.id, { method: body.paymentMethod })
+  await writeAudit("PAYMENT_SUBMITTED", "system", request.id, { method: body.paymentMethod })
   return { ok: true, id: request.id, isDuplicate }
 }
 
@@ -99,8 +99,8 @@ export interface ApproveResponse {
   request?: PaymentRequestRow
 }
 
-export function adminApprovePaymentRequest(id: string, req: ApproveRequest): ApproveResponse {
-  const request = getPaymentRequest(id)
+export async function adminApprovePaymentRequest(id: string, req: ApproveRequest): Promise<ApproveResponse> {
+  const request = await getPaymentRequest(id)
   if (!request) return { ok: false, error: "Payment request not found." }
   if (request.status !== "PENDING") return { ok: false, error: "Only pending payment requests can be approved." }
   if (request.is_duplicate) {
@@ -112,7 +112,7 @@ export function adminApprovePaymentRequest(id: string, req: ApproveRequest): App
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
 
   const code = randomAccessCode()
-  const passcode = createPasscode({
+  const passcode = await createPasscode({
     type: "personal",
     expires_at: expiresAt,
     code,
@@ -120,13 +120,13 @@ export function adminApprovePaymentRequest(id: string, req: ApproveRequest): App
     payment_request_id: request.id,
   })
 
-  const existing = findCustomerByEmailOrRef(request.email ?? undefined, request.transaction_reference ?? undefined)
+  const existing = await findCustomerByEmailOrRef(request.email ?? undefined, request.transaction_reference ?? undefined)
   let customer: CustomerRow
   if (existing) {
-    linkCustomerPasscode(existing.id, passcode.id)
+    await linkCustomerPasscode(existing.id, passcode.id)
     customer = existing
   } else {
-    customer = createCustomer({
+    customer = await createCustomer({
       name: request.full_name,
       email: request.email ?? undefined,
       phone: request.phone_number ?? undefined,
@@ -136,10 +136,10 @@ export function adminApprovePaymentRequest(id: string, req: ApproveRequest): App
     })
   }
 
-  updatePaymentRequestStatus(id, "APPROVED", { adminNote: req.adminNote, verifiedBy: actor })
-  writeAudit("PAYMENT_APPROVED", actor, request.id, { reference: request.transaction_reference })
-  writeAudit("PASSCODE_CREATED", actor, passcode.id, { paymentRequestId: id })
-  writeAudit("ACCESS_GRANTED", actor, passcode.id, { expiry: expiresAt })
+  await updatePaymentRequestStatus(id, "APPROVED", { adminNote: req.adminNote, verifiedBy: actor })
+  await writeAudit("PAYMENT_APPROVED", actor, request.id, { reference: request.transaction_reference })
+  await writeAudit("PASSCODE_CREATED", actor, passcode.id, { paymentRequestId: id })
+  await writeAudit("ACCESS_GRANTED", actor, passcode.id, { expiry: expiresAt })
 
   // Deliver the passcode to the user if an outbound channel is configured.
   void sendPasscodeNotification({
@@ -155,33 +155,37 @@ export function adminApprovePaymentRequest(id: string, req: ApproveRequest): App
     ok: true,
     passcode: passcode.code,
     expiresAt,
-    request: getPaymentRequest(id)!,
+    request: (await getPaymentRequest(id))!,
   }
 }
 
-export function adminRejectPaymentRequest(id: string, adminNote?: string, actor?: string): { ok: boolean; error?: string } {
-  const request = getPaymentRequest(id)
+export async function adminRejectPaymentRequest(
+  id: string,
+  adminNote?: string,
+  actor?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const request = await getPaymentRequest(id)
   if (!request) return { ok: false, error: "Payment request not found." }
   if (request.status !== "PENDING") return { ok: false, error: "Only pending payment requests can be rejected." }
-  updatePaymentRequestStatus(id, "REJECTED", { adminNote, verifiedBy: actor ?? "admin" })
-  writeAudit("PAYMENT_REJECTED", actor ?? "admin", request.id, { note: adminNote })
+  await updatePaymentRequestStatus(id, "REJECTED", { adminNote, verifiedBy: actor ?? "admin" })
+  await writeAudit("PAYMENT_REJECTED", actor ?? "admin", request.id, { note: adminNote })
   return { ok: true }
 }
 
 // ─── Admin: passcode revoke/reactivate ────────────────────────────────
 
-export function adminRevokePasscode(passcodeId: string, actor?: string): { ok: boolean; error?: string } {
-  const passcode = getPasscode(passcodeId)
+export async function adminRevokePasscode(passcodeId: string, actor?: string): Promise<{ ok: boolean; error?: string }> {
+  const passcode = await getPasscode(passcodeId)
   if (!passcode) return { ok: false, error: "Passcode not found." }
-  blockPasscode(passcodeId)
-  writeAudit("PASSCODE_REVOKED", actor ?? "admin", passcodeId, {})
+  await blockPasscode(passcodeId)
+  await writeAudit("PASSCODE_REVOKED", actor ?? "admin", passcodeId, {})
   return { ok: true }
 }
 
-export function adminReactivatePasscode(passcodeId: string, actor?: string): { ok: boolean; error?: string } {
-  const passcode = getPasscode(passcodeId)
+export async function adminReactivatePasscode(passcodeId: string, actor?: string): Promise<{ ok: boolean; error?: string }> {
+  const passcode = await getPasscode(passcodeId)
   if (!passcode) return { ok: false, error: "Passcode not found." }
-  unblockPasscode(passcodeId)
-  writeAudit("PASSCODE_REACTIVATED", actor ?? "admin", passcodeId, {})
+  await unblockPasscode(passcodeId)
+  await writeAudit("PASSCODE_REACTIVATED", actor ?? "admin", passcodeId, {})
   return { ok: true }
 }
