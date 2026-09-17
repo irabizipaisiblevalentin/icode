@@ -5,6 +5,7 @@ export { backendName }
 
 export const ACCESS_DURATION_DAYS = parseInt(process.env.ICODE_ACCESS_DURATION_DAYS ?? "30")
 export const TRIAL_DURATION_DAYS = parseInt(process.env.ICODE_TRIAL_DURATION_DAYS ?? "21")
+export const GOOGLE_TRIAL_DURATION_DAYS = parseInt(process.env.ICODE_GOOGLE_TRIAL_DURATION_DAYS ?? "21")
 export const PAYMENT_AMOUNT_RWF = 1000
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET
@@ -102,6 +103,31 @@ async function init(db: SqlDriver) {
     )
   `)
   await db.run(`
+    CREATE TABLE IF NOT EXISTS google_accounts (
+      id TEXT PRIMARY KEY,
+      google_sub TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      display_name TEXT,
+      trial_started_at TEXT,
+      trial_expires_at TEXT,
+      blocked INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS oauth_states (
+      state TEXT PRIMARY KEY,
+      machine_id TEXT NOT NULL,
+      hardware_id TEXT,
+      platform TEXT,
+      arch TEXT,
+      version TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    )
+  `)
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at)`)
+  await db.run(`
     CREATE TABLE IF NOT EXISTS payment_requests (
       id TEXT PRIMARY KEY,
       full_name TEXT NOT NULL,
@@ -156,7 +182,11 @@ async function init(db: SqlDriver) {
   if (!installCols.some((c) => c.name === "hardware_id")) {
     await db.run(`ALTER TABLE installs ADD COLUMN hardware_id TEXT`)
   }
+  if (!installCols.some((c) => c.name === "google_account_id")) {
+    await db.run(`ALTER TABLE installs ADD COLUMN google_account_id TEXT`)
+  }
   await db.run(`CREATE INDEX IF NOT EXISTS idx_installs_hardware ON installs(hardware_id)`)
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_installs_google ON installs(google_account_id)`)
 }
 
 // ─── Passcodes ────────────────────────────────────────────────────────
@@ -305,6 +335,7 @@ export interface InstallRow {
   arch: string
   version: string | null
   passcode_id: string | null
+  google_account_id: string | null
   registered_at: string
   last_seen_at: string
   blocked: number
@@ -445,6 +476,22 @@ export async function startTrial(opts: {
   const d = await db()
   const install = await upsertInstall(opts)
 
+  // If this machine is already licensed through a Google account (active trial),
+  // do not stack a second 21-day machine trial on top of it. The Google path is
+  // an alternative to the CLI trial/passcode, so a machine should only ever
+  // hold one free trial at a time.
+  if (install.google_account_id) {
+    const ga = install.google_account_id ? await getGoogleAccountById(install.google_account_id) : null
+    if (ga && ga.trial_expires_at && !ga.blocked && new Date(ga.trial_expires_at) > new Date()) {
+      return {
+        install,
+        passcode: install.passcode_id ? await getPasscode(install.passcode_id) : null,
+        already_started: true,
+        trial_expires_at: ga.trial_expires_at,
+      }
+    }
+  }
+
   if (install.trial_started_at) {
     return {
       install,
@@ -487,6 +534,125 @@ export async function activateInstallByCode(opts: {
     version: opts.version,
     passcode_id: opts.passcode_id,
   })
+}
+
+// ─── Google accounts & OAuth states ──────────────────────────────────
+
+export interface GoogleAccountRow {
+  id: string
+  google_sub: string
+  email: string
+  display_name: string | null
+  trial_started_at: string | null
+  trial_expires_at: string | null
+  blocked: number
+  created_at: string
+}
+
+export interface OAuthStateRow {
+  state: string
+  machine_id: string
+  hardware_id: string | null
+  platform: string | null
+  arch: string | null
+  version: string | null
+  created_at: string
+  expires_at: string
+}
+
+export async function getGoogleAccountByEmail(email: string): Promise<GoogleAccountRow | null> {
+  const row = await (await db()).get<GoogleAccountRow>(`SELECT * FROM google_accounts WHERE email = ?`, [email.toLowerCase().trim()])
+  return row ?? null
+}
+
+export async function getGoogleAccountBySub(sub: string): Promise<GoogleAccountRow | null> {
+  const row = await (await db()).get<GoogleAccountRow>(`SELECT * FROM google_accounts WHERE google_sub = ?`, [sub])
+  return row ?? null
+}
+
+// Creates the account row the first time a user signs in with Google. The
+// 21-day trial is tied to the Google account (email): a given account can only
+// start it once, across all machines.
+export async function upsertGoogleAccount(opts: {
+  google_sub: string
+  email: string
+  display_name?: string | null
+}): Promise<GoogleAccountRow> {
+  const d = await db()
+  const email = opts.email.toLowerCase().trim()
+  const existing = await getGoogleAccountByEmail(email)
+  if (existing) {
+    if (opts.display_name && existing.display_name !== opts.display_name) {
+      await d.run(`UPDATE google_accounts SET display_name = ? WHERE id = ?`, [opts.display_name, existing.id])
+      return (await getGoogleAccountById(existing.id))!
+    }
+    return existing
+  }
+  const id = randomUUID()
+  const expires = new Date(Date.now() + GOOGLE_TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  await d.run(
+    `INSERT INTO google_accounts (id, google_sub, email, display_name, trial_started_at, trial_expires_at) VALUES (?, ?, ?, ?, datetime('now'), ?)`,
+    [id, opts.google_sub, email, opts.display_name ?? null, expires],
+  )
+  await writeAudit("GOOGLE_TRIAL_STARTED", opts.google_sub, id, { email })
+  return (await getGoogleAccountById(id))!
+}
+
+export async function getGoogleAccountById(id: string): Promise<GoogleAccountRow | null> {
+  return (await db()).get<GoogleAccountRow>(`SELECT * FROM google_accounts WHERE id = ?`, [id])
+}
+
+// Links an install (machine) to a Google account so the account's trial grants
+// the machine access on /v1/install/status.
+export async function linkInstallToGoogleAccount(installId: string, googleAccountId: string): Promise<void> {
+  await (await db()).run(`UPDATE installs SET google_account_id = ? WHERE id = ?`, [googleAccountId, installId])
+}
+
+export async function getOAuthState(state: string): Promise<OAuthStateRow | null> {
+  const row = await (await db()).get<OAuthStateRow>(`SELECT * FROM oauth_states WHERE state = ?`, [state])
+  return row ?? null
+}
+
+export async function createOAuthState(opts: {
+  state: string
+  machine_id: string
+  hardware_id?: string
+  platform?: string
+  arch?: string
+  version?: string
+}): Promise<OAuthStateRow> {
+  const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+  await (await db()).run(
+    `INSERT INTO oauth_states (state, machine_id, hardware_id, platform, arch, version, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [opts.state, opts.machine_id, opts.hardware_id ?? null, opts.platform ?? null, opts.arch ?? null, opts.version ?? null, expires],
+  )
+  const row = await getOAuthState(opts.state)
+  return row!
+}
+
+export async function deleteOAuthState(state: string): Promise<void> {
+  await (await db()).run(`DELETE FROM oauth_states WHERE state = ?`, [state])
+}
+
+// Binds a machine to a Google account. Called after the OAuth callback so the
+// machine's install reflects the (possibly already-started) account trial.
+export async function activateInstallByGoogle(opts: {
+  machine_id: string
+  hardware_id?: string
+  platform: string
+  arch: string
+  version?: string
+  google_account_id: string
+}): Promise<InstallRow> {
+  const install = await upsertInstall({
+    machine_id: opts.machine_id,
+    hardware_id: opts.hardware_id,
+    platform: opts.platform,
+    arch: opts.arch,
+    version: opts.version,
+  })
+  await linkInstallToGoogleAccount(install.id, opts.google_account_id)
+  return install
 }
 
 // ─── Trial listing & alerts ───────────────────────────────────────────
@@ -552,6 +718,8 @@ export interface UserListItem {
   customer_name: string | null
   customer_email: string | null
   customer_phone: string | null
+  google_email: string | null
+  google_expires_at: string | null
   trial_started_at: string | null
   registered_at: string
   last_seen_at: string
@@ -573,12 +741,15 @@ export async function listUsers(): Promise<UserListItem[]> {
            c.name AS customer_name,
            c.email AS customer_email,
            c.phone AS customer_phone,
+           g.email AS google_email,
+           g.trial_expires_at AS google_expires_at,
            i.trial_started_at, i.registered_at, i.last_seen_at,
            i.blocked, i.block_reason,
            COALESCE(u.seconds_used, 0) AS usage_month
     FROM installs i
     LEFT JOIN passcodes p ON p.id = i.passcode_id
     LEFT JOIN customers c ON c.passcode_id = i.passcode_id
+    LEFT JOIN google_accounts g ON g.id = i.google_account_id
     LEFT JOIN usage u ON u.install_id = i.id AND u.period_key = ?
     ORDER BY i.last_seen_at DESC
   `,

@@ -30,6 +30,12 @@ import {
   type ApproveRequest,
 } from "./routes/payments"
 import {
+  beginGoogleAuth,
+  handleGoogleCallback,
+  googleConfigured,
+  type BeginGoogleRequest,
+} from "./routes/google"
+import {
   listPaymentRequests,
   getPaymentRequest,
   getPaymentStats,
@@ -140,6 +146,33 @@ const server = Bun.serve({
       const body = await parseBody<ActivateRequest>(request)
       const result = await activateByCode(body)
       return json(result, result.ok ? 200 : 403)
+    }
+
+    // ── Google sign-in (brokered OAuth) ───────────────────────────────
+    if (path === "/v1/google/begin" && method === "GET") {
+      const body: BeginGoogleRequest = {
+        machine_id: url.searchParams.get("machine_id") ?? undefined,
+        hardware_id: url.searchParams.get("hardware_id") ?? undefined,
+        platform: url.searchParams.get("platform") ?? undefined,
+        arch: url.searchParams.get("arch") ?? undefined,
+        version: url.searchParams.get("version") ?? undefined,
+      }
+      const result = await beginGoogleAuth(body, request)
+      return json(result, result.ok ? 200 : 400)
+    }
+
+    if (path === "/v1/google/callback" && method === "GET") {
+      const code = url.searchParams.get("code")
+      const state = url.searchParams.get("state")
+      const result = await handleGoogleCallback(code, state, request)
+      return new Response(result.html, {
+        status: result.ok ? 200 : 400,
+        headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
+      })
+    }
+
+    if (path === "/v1/google/config" && method === "GET") {
+      return json({ ok: true, enabled: googleConfigured() })
     }
 
     // ── Webhook: external form submission (Google Forms / Apps Script) ─
