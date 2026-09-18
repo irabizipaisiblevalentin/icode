@@ -127,8 +127,6 @@ export interface StatusResponse {
   passcode_blocked?: boolean
   passcode_expired?: boolean
   access_revoked?: boolean
-  google_trial_active?: boolean
-  google_expires_at?: string
   expires_at?: string
   type?: string
   remaining_seconds?: number
@@ -144,28 +142,7 @@ export async function status(req: StatusRequest): Promise<StatusResponse> {
     return { ok: false, blocked: true, access_revoked: true, message: "Your access to iCode has been revoked. Please contact the iCode admin." }
   }
 
-  // A Google account linked to this machine with an active trial grants access.
-  if (install.google_account_id) {
-    const ga = await getGoogleAccountById(install.google_account_id)
-    if (ga && ga.blocked) {
-      return { ok: false, blocked: true, access_revoked: true, message: "Your access to iCode has been revoked. Please contact the iCode admin." }
-    }
-    if (ga && ga.trial_expires_at) {
-      const alreadyExpired = new Date(ga.trial_expires_at) < new Date()
-      if (!alreadyExpired) {
-        return {
-          ok: true,
-          google_trial_active: true,
-          google_expires_at: ga.trial_expires_at,
-          expires_at: ga.trial_expires_at,
-          type: "google",
-          message: "OK",
-        }
-      }
-    }
-  }
-
-  // If the Google trial is expired or missing, fall back to passcode access.
+  // Trial or Passcode access for this machine.
   const passcode = install.passcode_id ? await getPasscode(install.passcode_id) : null
   if (!passcode) {
     return { ok: false, passcode_valid: false, message: "No passcode is linked to this device." }
